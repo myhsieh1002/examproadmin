@@ -4,6 +4,7 @@ import { usePathname, useRouter } from 'next/navigation'
 import { AppContext } from '@/hooks/useCurrentApp'
 import { supabase } from '@/lib/supabase-browser'
 import Link from 'next/link'
+import Image from 'next/image'
 
 const baseNavItems = [
   { href: '/dashboard', label: 'Dashboard', icon: '📊' },
@@ -87,9 +88,9 @@ export function ClientLayout({ children }: { children: React.ReactNode }) {
           gap: '8px',
           flexShrink: 0,
         }}>
-          <h1 style={{ fontSize: '20px', fontWeight: 'bold', marginBottom: '8px', padding: '0 8px' }}>
-            ExamPro Admin
-          </h1>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '0 8px', marginBottom: '8px' }}>
+            <Image src="/logo.png" alt="ExamPro" width={140} height={93} style={{ objectFit: 'contain' }} priority />
+          </div>
 
           {/* App Switcher */}
           <select

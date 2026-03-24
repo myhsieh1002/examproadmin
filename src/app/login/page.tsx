@@ -2,6 +2,7 @@
 import { useState } from 'react'
 import { supabase } from '@/lib/supabase-browser'
 import { useRouter } from 'next/navigation'
+import Image from 'next/image'
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
@@ -40,11 +41,11 @@ export default function LoginPage() {
         flexDirection: 'column',
         gap: '16px',
       }}>
-        <h1 style={{ fontSize: '24px', fontWeight: 'bold', textAlign: 'center', marginBottom: '8px' }}>
-          ExamPro Admin
-        </h1>
+        <div style={{ textAlign: 'center', marginBottom: '16px' }}>
+          <Image src="/logo.png" alt="ExamPro" width={240} height={160} style={{ objectFit: 'contain', margin: '0 auto' }} priority />
+        </div>
         <p style={{ textAlign: 'center', color: '#666', fontSize: '14px', marginBottom: '16px' }}>
-          Sign in to manage question banks
+          登入題庫管理系統
         </p>
         {error && (
           <div style={{ backgroundColor: '#fee', color: '#c33', padding: '12px', borderRadius: '8px', fontSize: '14px' }}>
