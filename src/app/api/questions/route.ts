@@ -24,16 +24,14 @@ export async function GET(request: NextRequest) {
       .order('sort_order')
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-    // Get live counts from questions table
+    // Get live counts using RPC to avoid Supabase row limit (default 1000)
     const { data: counts } = await supabase
-      .from('questions')
-      .select('category')
-      .eq('app_id', appId || '')
+      .rpc('count_questions_by_category', { p_app_id: appId || '' })
 
     const countMap: Record<string, number> = {}
     if (counts) {
-      for (const q of counts) {
-        countMap[q.category] = (countMap[q.category] || 0) + 1
+      for (const row of counts) {
+        countMap[row.category] = row.count
       }
     }
 
