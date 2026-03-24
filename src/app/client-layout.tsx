@@ -4,7 +4,6 @@ import { usePathname, useRouter } from 'next/navigation'
 import { AppContext } from '@/hooks/useCurrentApp'
 import { supabase } from '@/lib/supabase-browser'
 import Link from 'next/link'
-import Image from 'next/image'
 
 const baseNavItems = [
   { href: '/dashboard', label: 'Dashboard', icon: '📊' },
@@ -24,6 +23,7 @@ export function ClientLayout({ children }: { children: React.ReactNode }) {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null)
   const [userRole, setUserRole] = useState<string | null>(null)
   const [userId, setUserId] = useState<string | null>(null)
+  const [sidebarOpen, setSidebarOpen] = useState(false)
   const pathname = usePathname()
   const router = useRouter()
 
@@ -35,7 +35,6 @@ export function ClientLayout({ children }: { children: React.ReactNode }) {
         setIsAuthenticated(!!session)
         if (session?.user) {
           setUserId(session.user.id)
-          // Fetch user role from admin_users
           supabase
             .from('admin_users')
             .select('role')
@@ -58,6 +57,11 @@ export function ClientLayout({ children }: { children: React.ReactNode }) {
     return () => subscription.unsubscribe()
   }, [pathname, router])
 
+  // Close sidebar on route change (mobile)
+  useEffect(() => {
+    setSidebarOpen(false)
+  }, [pathname])
+
   if (pathname === '/login') {
     return <>{children}</>
   }
@@ -76,9 +80,91 @@ export function ClientLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <AppContext.Provider value={{ currentApp, setCurrentApp, userRole, userId }}>
+      <style>{`
+        @media (max-width: 768px) {
+          .sidebar {
+            position: fixed !important;
+            top: 0 !important;
+            left: 0 !important;
+            bottom: 0 !important;
+            z-index: 1000 !important;
+            transform: translateX(-100%);
+            transition: transform 0.3s ease;
+          }
+          .sidebar.open {
+            transform: translateX(0);
+          }
+          .sidebar-overlay {
+            display: block !important;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.5);
+            z-index: 999;
+          }
+          .mobile-header {
+            display: flex !important;
+          }
+          .main-content {
+            padding: 16px !important;
+          }
+        }
+        @media (min-width: 769px) {
+          .sidebar-overlay {
+            display: none !important;
+          }
+          .mobile-header {
+            display: none !important;
+          }
+        }
+      `}</style>
+
       <div style={{ display: 'flex', minHeight: '100vh' }}>
+        {/* Mobile Header */}
+        <div className="mobile-header" style={{
+          display: 'none',
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          height: '56px',
+          backgroundColor: '#1a1a2e',
+          color: 'white',
+          alignItems: 'center',
+          padding: '0 16px',
+          zIndex: 998,
+          gap: '12px',
+        }}>
+          <button
+            onClick={() => setSidebarOpen(!sidebarOpen)}
+            style={{
+              background: 'none',
+              border: 'none',
+              color: 'white',
+              fontSize: '24px',
+              cursor: 'pointer',
+              padding: '4px',
+            }}
+          >
+            ☰
+          </button>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/logo.png" alt="ExamPro" height={32} style={{ objectFit: 'contain' }} />
+        </div>
+
+        {/* Sidebar Overlay (mobile) */}
+        {sidebarOpen && (
+          <div
+            className="sidebar-overlay"
+            onClick={() => setSidebarOpen(false)}
+            style={{ display: 'none' }}
+          />
+        )}
+
         {/* Sidebar */}
-        <aside style={{
+        <aside className={`sidebar ${sidebarOpen ? 'open' : ''}`} style={{
           width: '240px',
           backgroundColor: '#1a1a2e',
           color: 'white',
@@ -89,7 +175,8 @@ export function ClientLayout({ children }: { children: React.ReactNode }) {
           flexShrink: 0,
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '0 8px', marginBottom: '8px' }}>
-            <Image src="/logo.png" alt="ExamPro" width={140} height={93} style={{ objectFit: 'contain' }} priority />
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/logo.png" alt="ExamPro" width={140} height={93} style={{ objectFit: 'contain' }} />
           </div>
 
           {/* App Switcher */}
@@ -163,7 +250,20 @@ export function ClientLayout({ children }: { children: React.ReactNode }) {
         </aside>
 
         {/* Main Content */}
-        <main style={{ flex: 1, padding: '24px 32px', backgroundColor: '#f8f9fa', overflowY: 'auto' }}>
+        <main className="main-content" style={{
+          flex: 1,
+          padding: '24px 32px',
+          backgroundColor: '#f8f9fa',
+          overflowY: 'auto',
+          marginTop: '0px',
+        }}>
+          <style>{`
+            @media (max-width: 768px) {
+              .main-content {
+                margin-top: 56px !important;
+              }
+            }
+          `}</style>
           {children}
         </main>
       </div>

@@ -2,7 +2,6 @@
 import { useState } from 'react'
 import { supabase } from '@/lib/supabase-browser'
 import { useRouter } from 'next/navigation'
-import Image from 'next/image'
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
@@ -31,18 +30,23 @@ export default function LoginPage() {
       alignItems: 'center',
       minHeight: '100vh',
       backgroundColor: '#1a1a2e',
+      padding: '16px',
+      boxSizing: 'border-box',
     }}>
       <form onSubmit={handleLogin} style={{
         backgroundColor: 'white',
-        padding: '40px',
+        padding: '32px 24px',
         borderRadius: '12px',
-        width: '400px',
+        width: '100%',
+        maxWidth: '400px',
         display: 'flex',
         flexDirection: 'column',
         gap: '16px',
+        boxSizing: 'border-box',
       }}>
         <div style={{ textAlign: 'center', marginBottom: '16px' }}>
-          <Image src="/logo.png" alt="ExamPro" width={240} height={160} style={{ objectFit: 'contain', margin: '0 auto' }} priority />
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/logo.png" alt="ExamPro" width={240} height={160} style={{ objectFit: 'contain', margin: '0 auto' }} />
         </div>
         <p style={{ textAlign: 'center', color: '#666', fontSize: '14px', marginBottom: '16px' }}>
           登入題庫管理系統
