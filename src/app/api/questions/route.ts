@@ -15,15 +15,34 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(data)
   }
 
-  // Utility: get categories for an app
+  // Utility: get categories for an app (with live question counts)
   if (action === 'categories') {
-    const { data, error } = await supabase
+    const { data: cats, error } = await supabase
       .from('categories')
       .select('*')
       .eq('app_id', appId)
       .order('sort_order')
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-    return NextResponse.json(data)
+
+    // Get live counts from questions table
+    const { data: counts } = await supabase
+      .from('questions')
+      .select('category')
+      .eq('app_id', appId || '')
+
+    const countMap: Record<string, number> = {}
+    if (counts) {
+      for (const q of counts) {
+        countMap[q.category] = (countMap[q.category] || 0) + 1
+      }
+    }
+
+    const result = (cats || []).map(cat => ({
+      ...cat,
+      question_count: countMap[cat.name] || 0,
+    }))
+
+    return NextResponse.json(result)
   }
 
   // List questions with pagination and filters
