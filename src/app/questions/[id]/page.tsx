@@ -1,0 +1,146 @@
+'use client'
+import { useEffect, useState } from 'react'
+import { useRouter, useParams } from 'next/navigation'
+
+export default function EditQuestionPage() {
+  const router = useRouter()
+  const params = useParams()
+  const id = params.id as string
+  const [question, setQuestion] = useState<any>(null)
+  const [saving, setSaving] = useState(false)
+  const [message, setMessage] = useState('')
+
+  useEffect(() => {
+    fetch(`/api/questions/${id}`).then(r => r.json()).then(setQuestion)
+  }, [id])
+
+  const handleSave = async () => {
+    setSaving(true)
+    setMessage('')
+    const { explanation_decrypted, created_at, updated_at, ...body } = question
+    if (explanation_decrypted !== undefined) {
+      body.explanation = explanation_decrypted
+    }
+    const res = await fetch(`/api/questions/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+    if (res.ok) {
+      setMessage('Saved successfully!')
+    } else {
+      const err = await res.json()
+      setMessage(`Error: ${err.error}`)
+    }
+    setSaving(false)
+  }
+
+  const handleDelete = async () => {
+    if (!confirm('Are you sure you want to delete this question?')) return
+    await fetch(`/api/questions/${id}`, { method: 'DELETE' })
+    router.push('/questions')
+  }
+
+  if (!question) return <p>Loading...</p>
+
+  return (
+    <div style={{ maxWidth: '800px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+        <h2 style={{ fontSize: '24px', fontWeight: 'bold' }}>Edit Question</h2>
+        <button onClick={handleDelete} style={{
+          padding: '8px 16px', backgroundColor: '#dc3545', color: 'white',
+          border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '14px'
+        }}>Delete</button>
+      </div>
+
+      {message && (
+        <div style={{
+          padding: '12px', borderRadius: '8px', marginBottom: '16px',
+          backgroundColor: message.startsWith('Error') ? '#fee' : '#d4edda',
+          color: message.startsWith('Error') ? '#c33' : '#155724',
+        }}>{message}</div>
+      )}
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', backgroundColor: 'white', padding: '24px', borderRadius: '12px', border: '1px solid #eee' }}>
+        <label style={{ fontSize: '14px', fontWeight: '600' }}>ID
+          <input value={question.id} disabled style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '6px', marginTop: '4px', backgroundColor: '#f5f5f5' }} />
+        </label>
+
+        <label style={{ fontSize: '14px', fontWeight: '600' }}>Question
+          <textarea
+            value={question.question}
+            onChange={(e) => setQuestion({ ...question, question: e.target.value })}
+            rows={3}
+            style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '6px', marginTop: '4px', resize: 'vertical' }}
+          />
+        </label>
+
+        {question.options?.map((opt: string, i: number) => (
+          <label key={i} style={{ fontSize: '14px', fontWeight: '600' }}>
+            Option {String.fromCharCode(65 + i)} {i === question.answer && '\u2705'}
+            <input
+              value={opt}
+              onChange={(e) => {
+                const newOpts = [...question.options]
+                newOpts[i] = e.target.value
+                setQuestion({ ...question, options: newOpts })
+              }}
+              style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '6px', marginTop: '4px', backgroundColor: i === question.answer ? '#e8f5e9' : 'white' }}
+            />
+          </label>
+        ))}
+
+        <label style={{ fontSize: '14px', fontWeight: '600' }}>Correct Answer
+          <select
+            value={question.answer}
+            onChange={(e) => setQuestion({ ...question, answer: parseInt(e.target.value) })}
+            style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '6px', marginTop: '4px' }}
+          >
+            {question.options?.map((_: string, i: number) => (
+              <option key={i} value={i}>{String.fromCharCode(65 + i)}</option>
+            ))}
+          </select>
+        </label>
+
+        <label style={{ fontSize: '14px', fontWeight: '600' }}>Explanation (encrypted)
+          <textarea
+            value={question.explanation_decrypted || ''}
+            onChange={(e) => setQuestion({ ...question, explanation_decrypted: e.target.value })}
+            rows={4}
+            placeholder="Enter explanation..."
+            style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '6px', marginTop: '4px', resize: 'vertical' }}
+          />
+        </label>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+          <label style={{ fontSize: '14px', fontWeight: '600' }}>Category
+            <input value={question.category} onChange={(e) => setQuestion({ ...question, category: e.target.value })}
+              style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '6px', marginTop: '4px' }} />
+          </label>
+          <label style={{ fontSize: '14px', fontWeight: '600' }}>Difficulty
+            <select value={question.difficulty} onChange={(e) => setQuestion({ ...question, difficulty: parseInt(e.target.value) })}
+              style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '6px', marginTop: '4px' }}>
+              <option value={1}>1 - Easy</option>
+              <option value={2}>2 - Medium</option>
+              <option value={3}>3 - Hard</option>
+            </select>
+          </label>
+        </div>
+
+        <label style={{ fontSize: '14px', fontWeight: '600' }}>Source
+          <input value={question.source || ''} onChange={(e) => setQuestion({ ...question, source: e.target.value })}
+            style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '6px', marginTop: '4px' }} />
+        </label>
+
+        <button onClick={handleSave} disabled={saving} style={{
+          padding: '12px', backgroundColor: '#0f3460', color: 'white',
+          border: 'none', borderRadius: '8px', fontSize: '16px',
+          cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.7 : 1,
+          marginTop: '8px'
+        }}>
+          {saving ? 'Saving...' : 'Save Changes'}
+        </button>
+      </div>
+    </div>
+  )
+}
