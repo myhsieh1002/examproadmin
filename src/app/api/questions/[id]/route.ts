@@ -31,6 +31,13 @@ export async function PUT(
     delete body.explanation
   }
 
+  // Track editor
+  if (body.edited_by_user_id) {
+    body.last_edited_by = body.edited_by_user_id
+    body.last_edited_at = new Date().toISOString()
+    delete body.edited_by_user_id
+  }
+
   const { data, error } = await supabase
     .from('questions')
     .update(body)

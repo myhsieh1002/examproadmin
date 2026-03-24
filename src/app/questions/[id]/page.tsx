@@ -1,26 +1,39 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { useRouter, useParams } from 'next/navigation'
+import { useCurrentApp } from '@/hooks/useCurrentApp'
 
 export default function EditQuestionPage() {
   const router = useRouter()
   const params = useParams()
+  const { userId } = useCurrentApp()
   const id = params.id as string
   const [question, setQuestion] = useState<any>(null)
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState('')
+  const [editorName, setEditorName] = useState<string | null>(null)
 
   useEffect(() => {
-    fetch(`/api/questions/${id}`).then(r => r.json()).then(setQuestion)
+    fetch(`/api/questions/${id}`).then(r => r.json()).then(data => {
+      setQuestion(data)
+      // Fetch editor name if last_edited_by exists
+      if (data.last_edited_by) {
+        fetch('/api/users').then(r => r.json()).then((users: any[]) => {
+          const editor = users.find((u: any) => u.id === data.last_edited_by)
+          if (editor) setEditorName(editor.display_name || editor.email)
+        }).catch(() => {})
+      }
+    })
   }, [id])
 
   const handleSave = async () => {
     setSaving(true)
     setMessage('')
-    const { explanation_decrypted, created_at, updated_at, ...body } = question
+    const { explanation_decrypted, created_at, updated_at, last_edited_by, last_edited_at, ...body } = question
     if (explanation_decrypted !== undefined) {
       body.explanation = explanation_decrypted
     }
+    body.edited_by_user_id = userId
     const res = await fetch(`/api/questions/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -131,6 +144,18 @@ export default function EditQuestionPage() {
           <input value={question.source || ''} onChange={(e) => setQuestion({ ...question, source: e.target.value })}
             style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '6px', marginTop: '4px' }} />
         </label>
+
+        {/* Last editor info */}
+        {(editorName || question.last_edited_at) && (
+          <div style={{ fontSize: '13px', color: '#888', borderTop: '1px solid #f0f0f0', paddingTop: '12px' }}>
+            {editorName && <span>Last edited by: <strong>{editorName}</strong></span>}
+            {question.last_edited_at && (
+              <span style={{ marginLeft: editorName ? '16px' : '0' }}>
+                {new Date(question.last_edited_at).toLocaleString('zh-TW')}
+              </span>
+            )}
+          </div>
+        )}
 
         <button onClick={handleSave} disabled={saving} style={{
           padding: '12px', backgroundColor: '#0f3460', color: 'white',

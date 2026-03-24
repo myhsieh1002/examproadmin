@@ -94,7 +94,9 @@ CREATE TABLE questions (
   group_order INTEGER,
   is_published BOOLEAN DEFAULT true,
   created_at TIMESTAMPTZ DEFAULT now(),
-  updated_at TIMESTAMPTZ DEFAULT now()
+  updated_at TIMESTAMPTZ DEFAULT now(),
+  last_edited_by UUID,
+  last_edited_at TIMESTAMPTZ
 );
 
 -- Indexes
@@ -148,6 +150,8 @@ CREATE TABLE admin_users (
   email TEXT NOT NULL,
   display_name TEXT,
   role TEXT DEFAULT 'admin',
+  allowed_apps TEXT[] DEFAULT '{}',
+  allowed_categories TEXT[] DEFAULT '{}',
   created_at TIMESTAMPTZ DEFAULT now()
 );
 
@@ -216,6 +220,10 @@ ALTER TABLE admin_users ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Admin read own profile"
   ON admin_users FOR SELECT
   USING (id = auth.uid());
+
+CREATE POLICY "Super admin manage users"
+  ON admin_users FOR ALL
+  USING (EXISTS (SELECT 1 FROM admin_users WHERE id = auth.uid() AND role = 'super_admin'));
 
 -- ============================================
 -- Helper function: bump sync version after question changes

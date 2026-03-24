@@ -5,7 +5,7 @@ import { AppContext } from '@/hooks/useCurrentApp'
 import { supabase } from '@/lib/supabase-browser'
 import Link from 'next/link'
 
-const navItems = [
+const baseNavItems = [
   { href: '/dashboard', label: 'Dashboard', icon: '📊' },
   { href: '/questions', label: 'Questions', icon: '📝' },
   { href: '/import', label: 'Import', icon: '📥' },
@@ -21,6 +21,8 @@ const apps = [
 export function ClientLayout({ children }: { children: React.ReactNode }) {
   const [currentApp, setCurrentApp] = useState('npexam')
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null)
+  const [userRole, setUserRole] = useState<string | null>(null)
+  const [userId, setUserId] = useState<string | null>(null)
   const pathname = usePathname()
   const router = useRouter()
 
@@ -30,6 +32,18 @@ export function ClientLayout({ children }: { children: React.ReactNode }) {
         router.push('/login')
       } else {
         setIsAuthenticated(!!session)
+        if (session?.user) {
+          setUserId(session.user.id)
+          // Fetch user role from admin_users
+          supabase
+            .from('admin_users')
+            .select('role')
+            .eq('id', session.user.id)
+            .single()
+            .then(({ data }) => {
+              setUserRole(data?.role || 'editor')
+            })
+        }
       }
     })
 
@@ -55,8 +69,12 @@ export function ClientLayout({ children }: { children: React.ReactNode }) {
     )
   }
 
+  const navItems = userRole === 'super_admin'
+    ? [...baseNavItems, { href: '/users', label: 'Users', icon: '👥' }]
+    : baseNavItems
+
   return (
-    <AppContext.Provider value={{ currentApp, setCurrentApp }}>
+    <AppContext.Provider value={{ currentApp, setCurrentApp, userRole, userId }}>
       <div style={{ display: 'flex', minHeight: '100vh' }}>
         {/* Sidebar */}
         <aside style={{
@@ -121,7 +139,10 @@ export function ClientLayout({ children }: { children: React.ReactNode }) {
             })}
           </nav>
 
-          <div style={{ marginTop: 'auto' }}>
+          <div style={{ marginTop: 'auto', fontSize: '12px', color: '#666', padding: '0 8px', marginBottom: '8px' }}>
+            {userRole && <span style={{ textTransform: 'capitalize' }}>{userRole.replace('_', ' ')}</span>}
+          </div>
+          <div>
             <button
               onClick={() => { supabase.auth.signOut(); router.push('/login') }}
               style={{

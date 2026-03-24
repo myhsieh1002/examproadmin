@@ -14,6 +14,7 @@ export interface Category {
   icon: string | null
   sort_order: number
   question_count: number
+  _isOrphan?: boolean
 }
 
 export interface Question {
@@ -37,6 +38,8 @@ export interface Question {
   is_published: boolean
   created_at: string
   updated_at: string
+  last_edited_by?: string
+  last_edited_at?: string
 }
 
 export interface SyncManifest {
@@ -44,6 +47,16 @@ export interface SyncManifest {
   version: string
   last_updated: string
   total_questions: number
+}
+
+export interface AdminUser {
+  id: string
+  email: string
+  display_name: string | null
+  role: 'super_admin' | 'admin' | 'editor'
+  allowed_apps: string[]
+  allowed_categories: string[]
+  created_at: string
 }
 
 // JSON format used by existing iOS apps

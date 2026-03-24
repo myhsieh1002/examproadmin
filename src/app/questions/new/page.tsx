@@ -1,10 +1,10 @@
 'use client'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useCurrentApp } from '@/hooks/useCurrentApp'
 import { useRouter } from 'next/navigation'
 
 export default function NewQuestionPage() {
-  const { currentApp } = useCurrentApp()
+  const { currentApp, userId } = useCurrentApp()
   const router = useRouter()
   const [question, setQuestion] = useState({
     id: '',
@@ -18,6 +18,23 @@ export default function NewQuestionPage() {
     tags: [] as string[],
   })
   const [saving, setSaving] = useState(false)
+  const [loadingId, setLoadingId] = useState(false)
+
+  const fetchNextId = async () => {
+    setLoadingId(true)
+    try {
+      const res = await fetch(`/api/questions/next-id?app_id=${currentApp}`)
+      if (res.ok) {
+        const { id } = await res.json()
+        setQuestion(prev => ({ ...prev, id }))
+      }
+    } catch { /* ignore */ }
+    setLoadingId(false)
+  }
+
+  useEffect(() => {
+    fetchNextId()
+  }, [currentApp])
 
   const handleSave = async () => {
     if (!question.id || !question.question || !question.category) {
@@ -28,7 +45,7 @@ export default function NewQuestionPage() {
     const res = await fetch('/api/questions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...question, app_id: currentApp }),
+      body: JSON.stringify({ ...question, app_id: currentApp, edited_by_user_id: userId }),
     })
     if (res.ok) {
       router.push('/questions')
@@ -44,9 +61,19 @@ export default function NewQuestionPage() {
       <h2 style={{ fontSize: '24px', fontWeight: 'bold', marginBottom: '24px' }}>New Question</h2>
       <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', backgroundColor: 'white', padding: '24px', borderRadius: '12px', border: '1px solid #eee' }}>
         <label style={{ fontSize: '14px', fontWeight: '600' }}>ID
-          <input value={question.id} onChange={(e) => setQuestion({ ...question, id: e.target.value })}
-            placeholder="e.g., NP-115-001-xxxx"
-            style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '6px', marginTop: '4px' }} />
+          <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
+            <input value={question.id} onChange={(e) => setQuestion({ ...question, id: e.target.value })}
+              placeholder={loadingId ? 'Generating...' : 'e.g., NP-2026-0001'}
+              style={{ flex: 1, padding: '10px', border: '1px solid #ddd', borderRadius: '6px' }} />
+            <button onClick={fetchNextId} disabled={loadingId}
+              title="Regenerate ID"
+              style={{
+                padding: '10px 14px', backgroundColor: '#f0f0f0', border: '1px solid #ddd',
+                borderRadius: '6px', cursor: loadingId ? 'not-allowed' : 'pointer', fontSize: '14px',
+              }}>
+              {loadingId ? '...' : 'Re-generate'}
+            </button>
+          </div>
         </label>
         <label style={{ fontSize: '14px', fontWeight: '600' }}>Question
           <textarea value={question.question} onChange={(e) => setQuestion({ ...question, question: e.target.value })}

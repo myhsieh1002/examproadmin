@@ -37,10 +37,27 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    const result = (cats || []).map(cat => ({
-      ...cat,
-      question_count: countMap[cat.name] || 0,
-    }))
+    const knownNames = new Set((cats || []).map(c => c.name))
+    const orphaned = Object.entries(countMap)
+      .filter(([name]) => !knownNames.has(name))
+      .map(([name, count], i) => ({
+        id: `orphan-${name}`,
+        app_id: appId,
+        name,
+        icon: null,
+        sort_order: 9999 + i,
+        question_count: count,
+        created_at: null,
+        _isOrphan: true,
+      }))
+
+    const result = [
+      ...(cats || []).map(cat => ({
+        ...cat,
+        question_count: countMap[cat.name] || 0,
+      })),
+      ...orphaned,
+    ]
 
     return NextResponse.json(result)
   }
@@ -78,6 +95,13 @@ export async function POST(request: NextRequest) {
   if (body.explanation) {
     body.explanation_encrypted = encrypt(body.explanation)
     delete body.explanation
+  }
+
+  // Track editor
+  if (body.edited_by_user_id) {
+    body.last_edited_by = body.edited_by_user_id
+    body.last_edited_at = new Date().toISOString()
+    delete body.edited_by_user_id
   }
 
   const { data, error } = await supabase.from('questions').insert(body).select().single()
