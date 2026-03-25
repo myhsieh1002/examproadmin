@@ -159,6 +159,34 @@ CREATE TABLE admin_users (
 -- Row Level Security (RLS)
 -- ============================================
 
+-- Helper functions (SECURITY DEFINER to avoid RLS recursion)
+-- These functions run with the privileges of the function owner (postgres),
+-- bypassing RLS on admin_users when called from other tables' policies.
+
+CREATE OR REPLACE FUNCTION is_admin()
+RETURNS BOOLEAN
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM admin_users
+    WHERE id = auth.uid()
+  );
+$$;
+
+CREATE OR REPLACE FUNCTION is_super_admin()
+RETURNS BOOLEAN
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM admin_users
+    WHERE id = auth.uid() AND role = 'super_admin'
+  );
+$$;
+
 -- Apps: public read, admin write
 ALTER TABLE apps ENABLE ROW LEVEL SECURITY;
 
@@ -168,7 +196,7 @@ CREATE POLICY "Public read apps"
 
 CREATE POLICY "Admin write apps"
   ON apps FOR ALL
-  USING (EXISTS (SELECT 1 FROM admin_users WHERE id = auth.uid()));
+  USING (is_admin());
 
 -- Categories: public read, admin write
 ALTER TABLE categories ENABLE ROW LEVEL SECURITY;
@@ -179,7 +207,7 @@ CREATE POLICY "Public read categories"
 
 CREATE POLICY "Admin write categories"
   ON categories FOR ALL
-  USING (EXISTS (SELECT 1 FROM admin_users WHERE id = auth.uid()));
+  USING (is_admin());
 
 -- Questions: public read published, admin full access
 ALTER TABLE questions ENABLE ROW LEVEL SECURITY;
@@ -190,7 +218,7 @@ CREATE POLICY "Public read published questions"
 
 CREATE POLICY "Admin full access questions"
   ON questions FOR ALL
-  USING (EXISTS (SELECT 1 FROM admin_users WHERE id = auth.uid()));
+  USING (is_admin());
 
 -- Sync manifest: public read, admin write
 ALTER TABLE sync_manifest ENABLE ROW LEVEL SECURITY;
@@ -201,7 +229,7 @@ CREATE POLICY "Public read sync_manifest"
 
 CREATE POLICY "Admin write sync_manifest"
   ON sync_manifest FOR ALL
-  USING (EXISTS (SELECT 1 FROM admin_users WHERE id = auth.uid()));
+  USING (is_admin());
 
 -- Question images: public read, admin write
 ALTER TABLE question_images ENABLE ROW LEVEL SECURITY;
@@ -212,9 +240,9 @@ CREATE POLICY "Public read question_images"
 
 CREATE POLICY "Admin write question_images"
   ON question_images FOR ALL
-  USING (EXISTS (SELECT 1 FROM admin_users WHERE id = auth.uid()));
+  USING (is_admin());
 
--- Admin users: only self-read
+-- Admin users: only self-read, super admin full access
 ALTER TABLE admin_users ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "Admin read own profile"
@@ -223,7 +251,7 @@ CREATE POLICY "Admin read own profile"
 
 CREATE POLICY "Super admin manage users"
   ON admin_users FOR ALL
-  USING (EXISTS (SELECT 1 FROM admin_users WHERE id = auth.uid() AND role = 'super_admin'));
+  USING (is_super_admin());
 
 -- ============================================
 -- Helper function: bump sync version after question changes
