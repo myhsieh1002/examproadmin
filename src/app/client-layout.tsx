@@ -8,6 +8,7 @@ import Link from 'next/link'
 const baseNavItems = [
   { href: '/dashboard', label: 'Dashboard', icon: '📊' },
   { href: '/questions', label: 'Questions', icon: '📝' },
+  { href: '/ai', label: 'AI Generate', icon: '🤖' },
   { href: '/import', label: 'Import', icon: '📥' },
   { href: '/categories', label: 'Categories', icon: '📁' },
 ]

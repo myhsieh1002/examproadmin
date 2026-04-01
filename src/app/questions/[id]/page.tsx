@@ -10,6 +10,7 @@ export default function EditQuestionPage() {
   const id = params.id as string
   const [question, setQuestion] = useState<any>(null)
   const [saving, setSaving] = useState(false)
+  const [generating, setGenerating] = useState(false)
   const [message, setMessage] = useState('')
   const [editorName, setEditorName] = useState<string | null>(null)
 
@@ -46,6 +47,35 @@ export default function EditQuestionPage() {
       setMessage(`Error: ${err.error}`)
     }
     setSaving(false)
+  }
+
+  const handleGenerateAI = async () => {
+    setGenerating(true)
+    setMessage('')
+    try {
+      const res = await fetch('/api/ai/generate-explanation', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          question: question.question,
+          options: question.options,
+          answer: question.answer,
+          category: question.category,
+          source: question.source,
+        }),
+      })
+      if (res.ok) {
+        const { explanation } = await res.json()
+        setQuestion({ ...question, explanation_decrypted: explanation })
+        setMessage('AI explanation generated. Review and save.')
+      } else {
+        const err = await res.json()
+        setMessage(`Error: ${err.error}`)
+      }
+    } catch {
+      setMessage('Error: Failed to connect to AI service')
+    }
+    setGenerating(false)
   }
 
   const handleDelete = async () => {
@@ -115,15 +145,33 @@ export default function EditQuestionPage() {
           </select>
         </label>
 
-        <label style={{ fontSize: '14px', fontWeight: '600' }}>Explanation (encrypted)
+        <div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+            <span style={{ fontSize: '14px', fontWeight: '600' }}>Explanation (encrypted)</span>
+            <button
+              onClick={handleGenerateAI}
+              disabled={generating}
+              style={{
+                padding: '6px 14px',
+                backgroundColor: generating ? '#ccc' : '#7c3aed',
+                color: 'white',
+                border: 'none',
+                borderRadius: '6px',
+                cursor: generating ? 'not-allowed' : 'pointer',
+                fontSize: '13px',
+              }}
+            >
+              {generating ? 'Generating...' : 'AI Generate'}
+            </button>
+          </div>
           <textarea
             value={question.explanation_decrypted || ''}
             onChange={(e) => setQuestion({ ...question, explanation_decrypted: e.target.value })}
-            rows={4}
+            rows={6}
             placeholder="Enter explanation..."
-            style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '6px', marginTop: '4px', resize: 'vertical' }}
+            style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '6px', resize: 'vertical' }}
           />
-        </label>
+        </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
           <label style={{ fontSize: '14px', fontWeight: '600' }}>Category
