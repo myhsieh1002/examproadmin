@@ -19,6 +19,7 @@ export default function CategoriesPage() {
     nurseexam: '護理師國考',
     surgeonexam: '外科專科醫師',
     mdexam1: '醫師第一階段國考',
+    mdexam2: '醫師第二階段國考',
   }
 
   const loadCategories = async () => {

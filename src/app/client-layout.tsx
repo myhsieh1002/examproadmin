@@ -17,6 +17,7 @@ const apps = [
   { id: 'nurseexam', label: '護理師國考' },
   { id: 'surgeonexam', label: '外科專科醫師' },
   { id: 'mdexam1', label: '醫師第一階段國考' },
+  { id: 'mdexam2', label: '醫師第二階段國考' },
 ]
 
 export function ClientLayout({ children }: { children: React.ReactNode }) {
