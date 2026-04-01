@@ -5,6 +5,7 @@ const APP_PREFIX: Record<string, string> = {
   npexam: 'NP',
   nurseexam: 'NR',
   surgeonexam: 'SG',
+  mdexam: 'MD',
 }
 
 export async function GET(request: NextRequest) {
