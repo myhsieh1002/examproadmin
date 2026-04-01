@@ -151,8 +151,9 @@ export function ClientLayout({ children }: { children: React.ReactNode }) {
           >
             ☰
           </button>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/logo.png" alt="ExamPro" height={32} style={{ objectFit: 'contain' }} />
+          <span style={{ fontSize: '16px', fontWeight: 'bold', letterSpacing: '0.5px' }}>
+            ExamPro Admin
+          </span>
         </div>
 
         {/* Sidebar Overlay (mobile) */}
@@ -177,7 +178,7 @@ export function ClientLayout({ children }: { children: React.ReactNode }) {
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '0 8px', marginBottom: '8px' }}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/logo.png" alt="ExamPro" width={140} height={93} style={{ objectFit: 'contain' }} />
+            <img src="/logo.png" alt="ExamPro" width={120} height={60} style={{ objectFit: 'contain' }} />
           </div>
 
           {/* App Switcher */}

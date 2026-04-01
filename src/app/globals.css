@@ -1,1 +1,97 @@
 @import "tailwindcss";
+
+/* ── Mobile Responsive Overrides ── */
+
+/* Dashboard: App cards grid */
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  margin-bottom: 32px;
+}
+
+/* Questions: filter bar */
+.filter-bar {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+/* Questions: header row */
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+  gap: 12px;
+}
+
+/* Table wrapper for horizontal scroll on mobile */
+.table-wrapper {
+  background-color: white;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid #eee;
+}
+
+@media (max-width: 768px) {
+  /* Dashboard: stack cards vertically */
+  .dashboard-grid {
+    grid-template-columns: 1fr !important;
+    gap: 12px;
+  }
+
+  /* Questions: stack filters vertically */
+  .filter-bar {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  /* Questions: header wrap */
+  .page-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+
+  .page-header h2 {
+    font-size: 20px !important;
+  }
+
+  /* Table: horizontal scroll */
+  .table-wrapper {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .table-wrapper table {
+    min-width: 600px;
+  }
+
+  /* Reduce padding in main content area */
+  .main-content {
+    padding: 12px !important;
+    margin-top: 56px !important;
+  }
+
+  /* Import page: make forms full width */
+  .import-form select,
+  .import-form input,
+  .import-form textarea {
+    width: 100% !important;
+    box-sizing: border-box;
+  }
+
+  /* Category table */
+  .category-table {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+@media (min-width: 769px) and (max-width: 1024px) {
+  /* Tablet: 2-column grid */
+  .dashboard-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+}

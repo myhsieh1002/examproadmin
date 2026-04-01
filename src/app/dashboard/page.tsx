@@ -32,7 +32,7 @@ export default function DashboardPage() {
       <h2 style={{ fontSize: '24px', fontWeight: 'bold', marginBottom: '24px' }}>Dashboard</h2>
 
       {/* App Cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px', marginBottom: '32px' }}>
+      <div className="dashboard-grid">
         {apps.map(app => (
           <div key={app.id} style={{
             backgroundColor: app.id === currentApp ? '#e8f4fd' : 'white',
@@ -53,7 +53,7 @@ export default function DashboardPage() {
           <h3 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '16px' }}>
             {current.display_name} - Categories
           </h3>
-          <div style={{ backgroundColor: 'white', borderRadius: '12px', overflow: 'hidden', border: '1px solid #eee' }}>
+          <div className="table-wrapper">
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ backgroundColor: '#f9f9f9' }}>

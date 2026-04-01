@@ -52,7 +52,7 @@ export default function QuestionsPage() {
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+      <div className="page-header">
         <h2 style={{ fontSize: '24px', fontWeight: 'bold' }}>Questions ({total})</h2>
         <Link href="/questions/new" style={{
           padding: '10px 20px',
@@ -67,7 +67,7 @@ export default function QuestionsPage() {
       </div>
 
       {/* Filters */}
-      <div style={{ display: 'flex', gap: '12px', marginBottom: '16px' }}>
+      <div className="filter-bar">
         <input
           type="text"
           placeholder="Search questions..."
@@ -103,7 +103,7 @@ export default function QuestionsPage() {
 
       {/* Table */}
       {loading ? <p>Loading...</p> : (
-        <div style={{ backgroundColor: 'white', borderRadius: '12px', overflow: 'hidden', border: '1px solid #eee' }}>
+        <div className="table-wrapper">
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ backgroundColor: '#f9f9f9' }}>

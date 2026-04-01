@@ -18,6 +18,7 @@ export default function CategoriesPage() {
     npexam: '專科護理師',
     nurseexam: '護理師國考',
     surgeonexam: '外科專科醫師',
+    mdexam1: '醫師第一階段國考',
   }
 
   const loadCategories = async () => {
@@ -133,7 +134,7 @@ export default function CategoriesPage() {
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+      <div className="page-header" style={{ marginBottom: '8px' }}>
         <h2 style={{ fontSize: '24px', fontWeight: 'bold' }}>Categories</h2>
         <button onClick={() => setShowAdd(!showAdd)} style={btnStyle('#0f3460')}>
           {showAdd ? 'Cancel' : '+ Add Category'}
@@ -143,7 +144,7 @@ export default function CategoriesPage() {
 
       {/* Add form */}
       {showAdd && (
-        <div style={{ backgroundColor: 'white', padding: '16px', borderRadius: '8px', border: '1px solid #eee', marginBottom: '16px', display: 'flex', gap: '12px', alignItems: 'flex-end' }}>
+        <div className="filter-bar" style={{ backgroundColor: 'white', padding: '16px', borderRadius: '8px', border: '1px solid #eee', marginBottom: '16px', alignItems: 'flex-end', flexWrap: 'wrap' }}>
           <label style={{ fontSize: '13px', fontWeight: '600', flex: 1 }}>
             Name
             <input value={addForm.name} onChange={(e) => setAddForm({ ...addForm, name: e.target.value })}
@@ -164,7 +165,7 @@ export default function CategoriesPage() {
       )}
 
       {/* Categories table */}
-      <div style={{ backgroundColor: 'white', borderRadius: '12px', overflow: 'hidden', border: '1px solid #eee' }}>
+      <div className="table-wrapper">
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr style={{ backgroundColor: '#f9f9f9' }}>
