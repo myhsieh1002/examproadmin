@@ -12,16 +12,9 @@ const baseNavItems = [
   { href: '/categories', label: 'Categories', icon: '📁' },
 ]
 
-const apps = [
-  { id: 'npexam', label: '專科護理師' },
-  { id: 'nurseexam', label: '護理師國考' },
-  { id: 'surgeonexam', label: '外科專科醫師' },
-  { id: 'mdexam1', label: '醫師第一階段國考' },
-  { id: 'mdexam2', label: '醫師第二階段國考' },
-]
-
 export function ClientLayout({ children }: { children: React.ReactNode }) {
   const [currentApp, setCurrentApp] = useState('npexam')
+  const [appList, setAppList] = useState<{ id: string; label: string }[]>([])
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null)
   const [userRole, setUserRole] = useState<string | null>(null)
   const [userId, setUserId] = useState<string | null>(null)
@@ -58,6 +51,21 @@ export function ClientLayout({ children }: { children: React.ReactNode }) {
 
     return () => subscription.unsubscribe()
   }, [pathname, router])
+
+  // Dynamically load app list from database
+  useEffect(() => {
+    if (!isAuthenticated) return
+    fetch('/api/questions?action=apps')
+      .then(res => res.ok ? res.json() : [])
+      .then((apps: { id: string; display_name: string }[]) => {
+        const list = apps.map(a => ({ id: a.id, label: a.display_name }))
+        setAppList(list)
+        if (list.length > 0 && !list.find(a => a.id === currentApp)) {
+          setCurrentApp(list[0].id)
+        }
+      })
+      .catch(() => {})
+  }, [isAuthenticated])
 
   // Close sidebar on route change (mobile)
   useEffect(() => {
@@ -197,7 +205,7 @@ export function ClientLayout({ children }: { children: React.ReactNode }) {
               cursor: 'pointer',
             }}
           >
-            {apps.map((app) => (
+            {appList.map((app) => (
               <option key={app.id} value={app.id}>{app.label}</option>
             ))}
           </select>

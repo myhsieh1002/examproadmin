@@ -1,19 +1,29 @@
 'use client'
 import { useEffect, useState } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { useCurrentApp } from '@/hooks/useCurrentApp'
 import Link from 'next/link'
 import type { Question, Category } from '@/lib/types'
 
 export default function QuestionsPage() {
   const { currentApp } = useCurrentApp()
+  const searchParams = useSearchParams()
   const [questions, setQuestions] = useState<Question[]>([])
   const [categories, setCategories] = useState<Category[]>([])
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
   const [search, setSearch] = useState('')
-  const [category, setCategory] = useState('')
+  const [category, setCategory] = useState(searchParams.get('category') || '')
   const [difficulty, setDifficulty] = useState('')
   const [loading, setLoading] = useState(true)
+
+  // Sync category from URL search params
+  useEffect(() => {
+    const urlCategory = searchParams.get('category') || ''
+    if (urlCategory !== category) {
+      setCategory(urlCategory)
+    }
+  }, [searchParams])
 
   useEffect(() => {
     setPage(1)

@@ -1,10 +1,12 @@
 'use client'
 import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { useCurrentApp } from '@/hooks/useCurrentApp'
 import type { App, Category } from '@/lib/types'
 
 export default function DashboardPage() {
-  const { currentApp } = useCurrentApp()
+  const { currentApp, setCurrentApp } = useCurrentApp()
+  const router = useRouter()
   const [apps, setApps] = useState<App[]>([])
   const [categories, setCategories] = useState<Category[]>([])
   const [loading, setLoading] = useState(true)
@@ -34,11 +36,13 @@ export default function DashboardPage() {
       {/* App Cards */}
       <div className="dashboard-grid">
         {apps.map(app => (
-          <div key={app.id} style={{
+          <div key={app.id} onClick={() => setCurrentApp(app.id)} style={{
             backgroundColor: app.id === currentApp ? '#e8f4fd' : 'white',
             border: app.id === currentApp ? '2px solid #0f3460' : '1px solid #eee',
             borderRadius: '12px',
             padding: '20px',
+            cursor: 'pointer',
+            transition: 'all 0.2s',
           }}>
             <p style={{ fontSize: '14px', color: '#666' }}>{app.display_name}</p>
             <p style={{ fontSize: '32px', fontWeight: 'bold', margin: '8px 0' }}>{app.total_questions}</p>
@@ -63,7 +67,13 @@ export default function DashboardPage() {
               </thead>
               <tbody>
                 {categories.map(cat => (
-                  <tr key={cat.id} style={{ borderTop: '1px solid #f0f0f0' }}>
+                  <tr
+                    key={cat.id}
+                    onClick={() => router.push(`/questions?category=${encodeURIComponent(cat.name)}`)}
+                    style={{ borderTop: '1px solid #f0f0f0', cursor: 'pointer', transition: 'background-color 0.15s' }}
+                    onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#f0f7ff')}
+                    onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = '')}
+                  >
                     <td style={{ padding: '12px 16px', fontSize: '14px' }}>{cat.name}</td>
                     <td style={{ padding: '12px 16px', textAlign: 'right', fontSize: '14px', fontWeight: '600' }}>{cat.question_count}</td>
                   </tr>
