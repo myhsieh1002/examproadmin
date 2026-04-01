@@ -54,7 +54,7 @@ export default function ImportPage() {
     npexam: '專科護理師',
     nurseexam: '護理師國考',
     surgeonexam: '外科專科醫師',
-    mdexam: '醫師第一階段國考',
+    mdexam1: '醫師第一階段國考',
   }
 
   return (
