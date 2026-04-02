@@ -12,11 +12,15 @@ interface LogEntry {
 interface JobState {
   id: string
   status: 'running' | 'stopping' | 'done' | 'stopped' | 'error'
+  app_id: string
+  category: string
   total: number
   current: number
   success_count: number
   error_count: number
-  logs: LogEntry[]
+  logs?: LogEntry[]
+  started_at: string
+  finished_at?: string
 }
 
 export default function AIGeneratePage() {
@@ -24,7 +28,8 @@ export default function AIGeneratePage() {
   const [categories, setCategories] = useState<Category[]>([])
   const [selectedCategory, setSelectedCategory] = useState('')
   const [overwrite, setOverwrite] = useState(false)
-  const [job, setJob] = useState<JobState | null>(null)
+  const [selectedJob, setSelectedJob] = useState<JobState | null>(null)
+  const [activeJobs, setActiveJobs] = useState<JobState[]>([])
   const [message, setMessage] = useState('')
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const logEndRef = useRef<HTMLDivElement>(null)
@@ -41,39 +46,45 @@ export default function AIGeneratePage() {
   // Auto-scroll logs
   useEffect(() => {
     logEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [job?.logs?.length])
+  }, [selectedJob?.logs?.length])
 
-  // Cleanup polling on unmount
-  useEffect(() => {
-    return () => {
-      if (pollRef.current) clearInterval(pollRef.current)
-    }
-  }, [])
-
-  const startPolling = useCallback((jobId: string) => {
+  // Poll active jobs list + selected job detail
+  const pollAll = useCallback(() => {
     if (pollRef.current) clearInterval(pollRef.current)
 
-    pollRef.current = setInterval(async () => {
+    const tick = async () => {
+      // Fetch active jobs list
       try {
-        const res = await fetch(`/api/ai/batch-status?job_id=${jobId}`)
-        if (!res.ok) return
-        const data = await res.json()
-        setJob(data)
-
-        // Stop polling when job is done
-        if (['done', 'stopped', 'error'].includes(data.status)) {
-          if (pollRef.current) clearInterval(pollRef.current)
-          pollRef.current = null
+        const res = await fetch('/api/ai/batch-status?list=active')
+        if (res.ok) {
+          const jobs: JobState[] = await res.json()
+          setActiveJobs(jobs)
         }
-      } catch {
-        // network error, keep polling
+      } catch { /* ignore */ }
+
+      // Fetch selected job detail (with logs)
+      if (selectedJob?.id) {
+        try {
+          const res = await fetch(`/api/ai/batch-status?job_id=${selectedJob.id}`)
+          if (res.ok) {
+            const data = await res.json()
+            setSelectedJob(data)
+          }
+        } catch { /* ignore */ }
       }
-    }, 3000)
-  }, [])
+    }
+
+    tick()
+    pollRef.current = setInterval(tick, 3000)
+  }, [selectedJob?.id])
+
+  useEffect(() => {
+    pollAll()
+    return () => { if (pollRef.current) clearInterval(pollRef.current) }
+  }, [pollAll])
 
   const handleStart = async () => {
     setMessage('')
-    setJob(null)
 
     const res = await fetch('/api/ai/batch-generate', {
       method: 'POST',
@@ -98,31 +109,39 @@ export default function AIGeneratePage() {
     }
 
     setMessage(`Job started. Processing ${data.total} questions (${data.skipped} skipped).`)
-    setJob({
+    const newJob: JobState = {
       id: data.job_id,
       status: 'running',
+      app_id: currentApp,
+      category: selectedCategory,
       total: data.total,
       current: 0,
       success_count: 0,
       error_count: 0,
       logs: [],
-    })
-
-    startPolling(data.job_id)
+      started_at: new Date().toISOString(),
+    }
+    setSelectedJob(newJob)
   }
 
-  const handleStop = async () => {
-    if (!job) return
+  const handleStop = async (jobId: string) => {
     await fetch('/api/ai/batch-generate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'stop', job_id: job.id }),
+      body: JSON.stringify({ action: 'stop', job_id: jobId }),
     })
-    setMessage('Stopping... will finish current question.')
   }
 
-  const isRunning = job?.status === 'running' || job?.status === 'stopping'
-  const pct = job && job.total > 0 ? Math.round((job.current / job.total) * 100) : 0
+  const handleSelectJob = async (jobId: string) => {
+    if (selectedJob?.id === jobId) return
+    const res = await fetch(`/api/ai/batch-status?job_id=${jobId}`)
+    if (res.ok) {
+      setSelectedJob(await res.json())
+    }
+  }
+
+  const isRunning = selectedJob?.status === 'running' || selectedJob?.status === 'stopping'
+  const pct = selectedJob && selectedJob.total > 0 ? Math.round((selectedJob.current / selectedJob.total) * 100) : 0
 
   const statusLabel = (status: string) => {
     switch (status) {
@@ -132,6 +151,17 @@ export default function AIGeneratePage() {
       case 'stopped': return '⏹️ Stopped'
       case 'error': return '❌ Error'
       default: return status
+    }
+  }
+
+  const statusColor = (status: string) => {
+    switch (status) {
+      case 'running': return '#7c3aed'
+      case 'stopping': return '#f59e0b'
+      case 'done': return '#16a34a'
+      case 'stopped': return '#6b7280'
+      case 'error': return '#dc2626'
+      default: return '#666'
     }
   }
 
@@ -147,7 +177,6 @@ export default function AIGeneratePage() {
             <select
               value={selectedCategory}
               onChange={(e) => setSelectedCategory(e.target.value)}
-              disabled={isRunning}
               style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '6px', marginTop: '4px' }}
             >
               <option value="">-- Select Category --</option>
@@ -165,7 +194,6 @@ export default function AIGeneratePage() {
                 type="checkbox"
                 checked={overwrite}
                 onChange={(e) => setOverwrite(e.target.checked)}
-                disabled={isRunning}
               />
               <span style={{ fontWeight: 'normal' }}>Overwrite existing explanations</span>
             </div>
@@ -178,49 +206,95 @@ export default function AIGeneratePage() {
           </p>
         )}
 
-        <div style={{ display: 'flex', gap: '12px' }}>
-          {!isRunning ? (
-            <button
-              onClick={handleStart}
-              disabled={!selectedCategory}
-              style={{
-                padding: '12px 24px',
-                backgroundColor: selectedCategory ? '#7c3aed' : '#ccc',
-                color: 'white',
-                border: 'none',
-                borderRadius: '8px',
-                fontSize: '15px',
-                cursor: selectedCategory ? 'pointer' : 'not-allowed',
-              }}
-            >
-              Start Batch Generate
-            </button>
-          ) : (
-            <button
-              onClick={handleStop}
-              disabled={job?.status === 'stopping'}
-              style={{
-                padding: '12px 24px',
-                backgroundColor: job?.status === 'stopping' ? '#999' : '#dc3545',
-                color: 'white',
-                border: 'none',
-                borderRadius: '8px',
-                fontSize: '15px',
-                cursor: job?.status === 'stopping' ? 'not-allowed' : 'pointer',
-              }}
-            >
-              {job?.status === 'stopping' ? 'Stopping...' : 'Stop'}
-            </button>
-          )}
-        </div>
+        <button
+          onClick={handleStart}
+          disabled={!selectedCategory}
+          style={{
+            padding: '12px 24px',
+            backgroundColor: selectedCategory ? '#7c3aed' : '#ccc',
+            color: 'white',
+            border: 'none',
+            borderRadius: '8px',
+            fontSize: '15px',
+            cursor: selectedCategory ? 'pointer' : 'not-allowed',
+          }}
+        >
+          Start Batch Generate
+        </button>
       </div>
 
-      {/* Progress */}
-      {job && job.total > 0 && (
+      {/* Active Jobs */}
+      {activeJobs.length > 0 && (
+        <div style={{ marginBottom: '24px' }}>
+          <h3 style={{ fontSize: '16px', fontWeight: '600', marginBottom: '12px' }}>Active Jobs ({activeJobs.length})</h3>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            {activeJobs.map((aj) => {
+              const ajPct = aj.total > 0 ? Math.round((aj.current / aj.total) * 100) : 0
+              const isSelected = selectedJob?.id === aj.id
+
+              return (
+                <div
+                  key={aj.id}
+                  onClick={() => handleSelectJob(aj.id)}
+                  style={{
+                    backgroundColor: 'white',
+                    border: isSelected ? '2px solid #7c3aed' : '1px solid #eee',
+                    borderRadius: '10px',
+                    padding: '14px 18px',
+                    cursor: 'pointer',
+                    transition: 'all 0.15s',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
+                    <span style={{
+                      padding: '2px 8px', borderRadius: '10px', fontSize: '11px', fontWeight: '600',
+                      backgroundColor: statusColor(aj.status) + '20', color: statusColor(aj.status),
+                    }}>
+                      {statusLabel(aj.status)}
+                    </span>
+                    <span style={{ fontSize: '13px', fontWeight: '600' }}>{aj.category}</span>
+                    <span style={{ fontSize: '12px', color: '#999' }}>{aj.app_id}</span>
+                    <span style={{ fontSize: '12px', color: '#999', marginLeft: 'auto' }}>
+                      {aj.current}/{aj.total} ({ajPct}%)
+                    </span>
+                    {(aj.status === 'running' || aj.status === 'stopping') && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); handleStop(aj.id) }}
+                        disabled={aj.status === 'stopping'}
+                        style={{
+                          padding: '4px 12px',
+                          backgroundColor: aj.status === 'stopping' ? '#999' : '#dc3545',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '5px',
+                          fontSize: '12px',
+                          cursor: aj.status === 'stopping' ? 'not-allowed' : 'pointer',
+                        }}
+                      >
+                        {aj.status === 'stopping' ? 'Stopping...' : 'Stop'}
+                      </button>
+                    )}
+                  </div>
+                  <div style={{ width: '100%', height: '4px', backgroundColor: '#e5e7eb', borderRadius: '2px', overflow: 'hidden' }}>
+                    <div style={{
+                      width: `${ajPct}%`, height: '100%',
+                      backgroundColor: statusColor(aj.status),
+                      borderRadius: '2px', transition: 'width 0.3s',
+                    }} />
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Selected Job Detail */}
+      {selectedJob && selectedJob.total > 0 && (
         <div style={{ backgroundColor: 'white', padding: '24px', borderRadius: '12px', border: '1px solid #eee', marginBottom: '24px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
             <span style={{ fontSize: '14px', fontWeight: '600' }}>
-              {statusLabel(job.status)} — {job.current} / {job.total}
+              {statusLabel(selectedJob.status)} — {selectedJob.category} — {selectedJob.current} / {selectedJob.total}
             </span>
             <span style={{ fontSize: '14px', color: '#666' }}>{pct}%</span>
           </div>
@@ -230,7 +304,7 @@ export default function AIGeneratePage() {
               style={{
                 width: `${pct}%`,
                 height: '100%',
-                backgroundColor: job.status === 'done' ? '#16a34a' : job.status === 'error' ? '#dc2626' : '#7c3aed',
+                backgroundColor: selectedJob.status === 'done' ? '#16a34a' : selectedJob.status === 'error' ? '#dc2626' : '#7c3aed',
                 borderRadius: '4px',
                 transition: 'width 0.3s',
               }}
@@ -238,14 +312,14 @@ export default function AIGeneratePage() {
           </div>
 
           <div style={{ display: 'flex', gap: '16px', marginTop: '12px', fontSize: '13px' }}>
-            <span style={{ color: '#16a34a' }}>Success: {job.success_count}</span>
-            {job.error_count > 0 && <span style={{ color: '#dc2626' }}>Errors: {job.error_count}</span>}
+            <span style={{ color: '#16a34a' }}>Success: {selectedJob.success_count}</span>
+            {selectedJob.error_count > 0 && <span style={{ color: '#dc2626' }}>Errors: {selectedJob.error_count}</span>}
           </div>
         </div>
       )}
 
-      {/* Log */}
-      {job && job.logs && job.logs.length > 0 && (
+      {/* Log for selected job */}
+      {selectedJob?.logs && selectedJob.logs.length > 0 && (
         <div style={{
           backgroundColor: 'white',
           padding: '16px',
@@ -254,8 +328,10 @@ export default function AIGeneratePage() {
           maxHeight: '400px',
           overflowY: 'auto',
         }}>
-          <h3 style={{ fontSize: '14px', fontWeight: '600', marginBottom: '12px' }}>Log</h3>
-          {job.logs.map((log, i) => (
+          <h3 style={{ fontSize: '14px', fontWeight: '600', marginBottom: '12px' }}>
+            Log — {selectedJob.category}
+          </h3>
+          {selectedJob.logs.map((log, i) => (
             <div
               key={i}
               style={{
