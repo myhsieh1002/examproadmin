@@ -122,6 +122,7 @@ export default function QuestionsPage() {
                 <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: '13px', color: '#666', width: '160px' }}>Category</th>
                 <th style={{ padding: '12px 16px', textAlign: 'center', fontSize: '13px', color: '#666', width: '80px' }}>Diff</th>
                 <th style={{ padding: '12px 16px', textAlign: 'center', fontSize: '13px', color: '#666', width: '60px' }}>Ans</th>
+                <th style={{ padding: '12px 16px', textAlign: 'center', fontSize: '13px', color: '#666', width: '50px' }}>Exp</th>
               </tr>
             </thead>
             <tbody>
@@ -140,6 +141,12 @@ export default function QuestionsPage() {
                   </td>
                   <td style={{ padding: '12px 16px', textAlign: 'center', fontSize: '14px', fontWeight: '600' }}>
                     {String.fromCharCode(65 + q.answer)}
+                  </td>
+                  <td style={{ padding: '12px 16px', textAlign: 'center' }}>
+                    <span style={{
+                      display: 'inline-block', width: '10px', height: '10px', borderRadius: '50%',
+                      backgroundColor: q.explanation_encrypted ? '#16a34a' : '#ef4444',
+                    }} title={q.explanation_encrypted ? 'Has explanation' : 'No explanation'} />
                   </td>
                 </tr>
               ))}

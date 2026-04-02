@@ -15,6 +15,47 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(data)
   }
 
+  // Utility: get prev/next question IDs
+  if (action === 'neighbors') {
+    const qid = searchParams.get('id')
+    if (!qid || !appId) return NextResponse.json({ error: 'Missing id or app_id' }, { status: 400 })
+
+    const [{ data: prevData }, { data: nextData }] = await Promise.all([
+      supabase.from('questions').select('id').eq('app_id', appId).lt('id', qid).order('id', { ascending: false }).limit(1),
+      supabase.from('questions').select('id').eq('app_id', appId).gt('id', qid).order('id', { ascending: true }).limit(1),
+    ])
+
+    return NextResponse.json({
+      prev: prevData?.[0]?.id || null,
+      next: nextData?.[0]?.id || null,
+    })
+  }
+
+  // Utility: explanation stats per app and per category
+  if (action === 'explanation-stats') {
+    // Total with explanation per app
+    const { data: allQ } = await supabase
+      .from('questions')
+      .select('category, explanation_encrypted')
+      .eq('app_id', appId || '')
+
+    const stats: Record<string, { total: number; withExplanation: number }> = {}
+    let appTotal = 0, appWithExp = 0
+
+    for (const q of allQ || []) {
+      const cat = q.category || '_uncategorized'
+      if (!stats[cat]) stats[cat] = { total: 0, withExplanation: 0 }
+      stats[cat].total++
+      appTotal++
+      if (q.explanation_encrypted) {
+        stats[cat].withExplanation++
+        appWithExp++
+      }
+    }
+
+    return NextResponse.json({ app: { total: appTotal, withExplanation: appWithExp }, categories: stats })
+  }
+
   // Utility: get categories for an app (with live question counts)
   if (action === 'categories') {
     const { data: cats, error } = await supabase

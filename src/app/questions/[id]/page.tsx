@@ -16,6 +16,8 @@ export default function EditQuestionPage() {
   const [uploading, setUploading] = useState(false)
   const [message, setMessage] = useState('')
   const [editorName, setEditorName] = useState<string | null>(null)
+  const [prevId, setPrevId] = useState<string | null>(null)
+  const [nextId, setNextId] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -27,6 +29,18 @@ export default function EditQuestionPage() {
           const editor = users.find((u: any) => u.id === data.last_edited_by)
           if (editor) setEditorName(editor.display_name || editor.email)
         }).catch(() => {})
+      }
+      // Fetch prev/next IDs
+      if (data.app_id) {
+        fetch(`/api/questions?app_id=${data.app_id}&action=neighbors&id=${id}`)
+          .then(r => r.ok ? r.json() : null)
+          .then(nav => {
+            if (nav) {
+              setPrevId(nav.prev || null)
+              setNextId(nav.next || null)
+            }
+          })
+          .catch(() => {})
       }
     })
   }, [id])
@@ -279,11 +293,37 @@ export default function EditQuestionPage() {
           </div>
         )}
 
+        {/* Prev / Next Navigation */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', marginTop: '8px' }}>
+          <button
+            onClick={() => prevId && router.push(`/questions/${prevId}`)}
+            disabled={!prevId}
+            style={{
+              flex: 1, padding: '10px', backgroundColor: 'white', color: prevId ? '#0f3460' : '#ccc',
+              border: `1px solid ${prevId ? '#0f3460' : '#ddd'}`, borderRadius: '8px', fontSize: '14px',
+              cursor: prevId ? 'pointer' : 'not-allowed',
+            }}
+          >
+            ← Prev
+          </button>
+          <button
+            onClick={() => nextId && router.push(`/questions/${nextId}`)}
+            disabled={!nextId}
+            style={{
+              flex: 1, padding: '10px', backgroundColor: 'white', color: nextId ? '#0f3460' : '#ccc',
+              border: `1px solid ${nextId ? '#0f3460' : '#ddd'}`, borderRadius: '8px', fontSize: '14px',
+              cursor: nextId ? 'pointer' : 'not-allowed',
+            }}
+          >
+            Next →
+          </button>
+        </div>
+
         <button onClick={handleSave} disabled={saving} style={{
           padding: '12px', backgroundColor: '#0f3460', color: 'white',
           border: 'none', borderRadius: '8px', fontSize: '16px',
           cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.7 : 1,
-          marginTop: '8px'
+          marginTop: '4px'
         }}>
           {saving ? 'Saving...' : 'Save Changes'}
         </button>
