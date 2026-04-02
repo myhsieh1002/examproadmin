@@ -33,12 +33,16 @@ export async function DELETE(
   const { id } = await params
   const supabase = createServerClient()
 
-  // Delete from admin_users (cascades from auth.users FK)
+  // Delete from admin_users first
   const { error } = await supabase.from('admin_users').delete().eq('id', id)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  // Disable the auth user
-  await supabase.auth.admin.updateUserById(id, { ban_duration: '876000h' }) // ~100 years
+  // Permanently delete auth user (frees email for re-invitation)
+  const { error: authError } = await supabase.auth.admin.deleteUser(id)
+  if (authError) {
+    // Non-critical: admin_users record already deleted
+    console.error('Failed to delete auth user:', authError.message)
+  }
 
   return NextResponse.json({ success: true })
 }

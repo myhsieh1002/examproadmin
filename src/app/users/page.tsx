@@ -4,15 +4,11 @@ import { useCurrentApp } from '@/hooks/useCurrentApp'
 import type { AdminUser } from '@/lib/types'
 
 const ROLES = ['super_admin', 'admin', 'editor'] as const
-const APP_OPTIONS = [
-  { id: 'npexam', label: '專科護理師' },
-  { id: 'nurseexam', label: '護理師國考' },
-  { id: 'surgeonexam', label: '外科專科醫師' },
-]
 
 export default function UsersPage() {
   const { userRole } = useCurrentApp()
   const [users, setUsers] = useState<AdminUser[]>([])
+  const [appOptions, setAppOptions] = useState<{ id: string; label: string }[]>([])
   const [loading, setLoading] = useState(true)
   const [showInvite, setShowInvite] = useState(false)
   const [inviteForm, setInviteForm] = useState({ email: '', display_name: '', role: 'editor' as string, allowed_apps: [] as string[], allowed_categories: '' })
@@ -27,6 +23,16 @@ export default function UsersPage() {
     if (res.ok) setUsers(await res.json())
     setLoading(false)
   }
+
+  // Load apps dynamically
+  useEffect(() => {
+    fetch('/api/questions?action=apps')
+      .then(r => r.ok ? r.json() : [])
+      .then((apps: { id: string; display_name: string }[]) => {
+        setAppOptions(apps.map(a => ({ id: a.id, label: a.display_name })))
+      })
+      .catch(() => {})
+  }, [])
 
   useEffect(() => { loadUsers() }, [])
 
@@ -97,11 +103,13 @@ export default function UsersPage() {
   }
 
   const handleDelete = async (user: AdminUser) => {
-    if (!confirm(`Remove user ${user.email}? This will disable their account.`)) return
+    if (!confirm(`Permanently remove user ${user.email}? This will delete their account and allow re-invitation.`)) return
     setSaving(true)
     const res = await fetch(`/api/users/${user.id}`, { method: 'DELETE' })
-    if (res.ok) await loadUsers()
-    else {
+    if (res.ok) {
+      setMessage(`User ${user.email} has been removed.`)
+      await loadUsers()
+    } else {
       const err = await res.json()
       alert(`Error: ${err.error}`)
     }
@@ -160,7 +168,7 @@ export default function UsersPage() {
             <div style={{ fontSize: '13px', fontWeight: '600' }}>
               Allowed Apps
               <div style={{ display: 'flex', gap: '8px', marginTop: '4px', flexWrap: 'wrap' }}>
-                {APP_OPTIONS.map(app => (
+                {appOptions.map(app => (
                   <label key={app.id} style={{ fontSize: '13px', display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}>
                     <input type="checkbox" checked={inviteForm.allowed_apps.includes(app.id)}
                       onChange={() => setInviteForm({ ...inviteForm, allowed_apps: toggleApp(inviteForm.allowed_apps, app.id) })} />
@@ -223,7 +231,7 @@ export default function UsersPage() {
                   <td style={{ padding: '12px 16px', fontSize: '13px' }}>
                     {isEditing ? (
                       <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                        {APP_OPTIONS.map(app => (
+                        {appOptions.map(app => (
                           <label key={app.id} style={{ fontSize: '12px', display: 'flex', alignItems: 'center', gap: '3px', cursor: 'pointer' }}>
                             <input type="checkbox" checked={editForm.allowed_apps.includes(app.id)}
                               onChange={() => setEditForm({ ...editForm, allowed_apps: toggleApp(editForm.allowed_apps, app.id) })} />
@@ -232,7 +240,7 @@ export default function UsersPage() {
                         ))}
                       </div>
                     ) : (
-                      (user.allowed_apps?.length ? user.allowed_apps.map(a => APP_OPTIONS.find(o => o.id === a)?.label || a).join(', ') : 'All')
+                      (user.allowed_apps?.length ? user.allowed_apps.map(a => appOptions.find(o => o.id === a)?.label || a).join(', ') : 'All')
                     )}
                   </td>
                   <td style={{ padding: '12px 16px', fontSize: '13px' }}>
@@ -261,6 +269,48 @@ export default function UsersPage() {
             })}
           </tbody>
         </table>
+      </div>
+
+      {/* Permissions Reference Table */}
+      <div style={{ marginTop: '40px' }}>
+        <h3 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '16px' }}>Role Permissions Reference</h3>
+        <div style={{ backgroundColor: 'white', borderRadius: '12px', overflow: 'hidden', border: '1px solid #eee' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr style={{ backgroundColor: '#f9f9f9' }}>
+                <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: '13px', color: '#666' }}>Feature</th>
+                <th style={{ padding: '12px 16px', textAlign: 'center', fontSize: '13px', color: '#1565c0' }}>Super Admin</th>
+                <th style={{ padding: '12px 16px', textAlign: 'center', fontSize: '13px', color: '#2e7d32' }}>Admin</th>
+                <th style={{ padding: '12px 16px', textAlign: 'center', fontSize: '13px', color: '#e65100' }}>Editor</th>
+              </tr>
+            </thead>
+            <tbody>
+              {[
+                { feature: 'Dashboard', super_admin: true, admin: true, editor: true },
+                { feature: 'View Questions', super_admin: true, admin: true, editor: true },
+                { feature: 'Create / Edit Questions', super_admin: true, admin: true, editor: true },
+                { feature: 'Delete Questions', super_admin: true, admin: true, editor: false },
+                { feature: 'AI Generate Explanations', super_admin: true, admin: true, editor: true },
+                { feature: 'Batch AI Generate', super_admin: true, admin: true, editor: false },
+                { feature: 'Import Questions (JSON)', super_admin: true, admin: true, editor: false },
+                { feature: 'Manage Categories', super_admin: true, admin: true, editor: false },
+                { feature: 'Upload / Manage Images', super_admin: true, admin: true, editor: true },
+                { feature: 'View / Respond to Feedback', super_admin: true, admin: true, editor: false },
+                { feature: 'User Management', super_admin: true, admin: false, editor: false },
+                { feature: 'Access All Apps', super_admin: true, admin: false, editor: false },
+                { feature: 'Restricted to Allowed Apps', super_admin: false, admin: true, editor: true },
+                { feature: 'Restricted to Allowed Categories', super_admin: false, admin: false, editor: true },
+              ].map((row, i) => (
+                <tr key={i} style={{ borderTop: '1px solid #f0f0f0' }}>
+                  <td style={{ padding: '10px 16px', fontSize: '14px' }}>{row.feature}</td>
+                  <td style={{ padding: '10px 16px', textAlign: 'center', fontSize: '16px' }}>{row.super_admin ? '✅' : '—'}</td>
+                  <td style={{ padding: '10px 16px', textAlign: 'center', fontSize: '16px' }}>{row.admin ? '✅' : '—'}</td>
+                  <td style={{ padding: '10px 16px', textAlign: 'center', fontSize: '16px' }}>{row.editor ? '✅' : '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   )
