@@ -28,9 +28,11 @@ export default function AIGeneratePage() {
   const [categories, setCategories] = useState<Category[]>([])
   const [selectedCategory, setSelectedCategory] = useState('')
   const [overwrite, setOverwrite] = useState(false)
-  const [selectedJob, setSelectedJob] = useState<JobState | null>(null)
+  const [activeJob, setActiveJob] = useState<JobState | null>(null)
   const [activeJobs, setActiveJobs] = useState<JobState[]>([])
   const [message, setMessage] = useState('')
+  const stoppedRef = useRef(false)
+  const runningRef = useRef(false)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const logEndRef = useRef<HTMLDivElement>(null)
 
@@ -46,42 +48,77 @@ export default function AIGeneratePage() {
   // Auto-scroll logs
   useEffect(() => {
     logEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [selectedJob?.logs?.length])
+  }, [activeJob?.logs?.length])
 
-  // Poll active jobs list + selected job detail
-  const pollAll = useCallback(() => {
+  // Poll active jobs list (for the sidebar panel)
+  const pollActiveJobs = useCallback(() => {
     if (pollRef.current) clearInterval(pollRef.current)
-
     const tick = async () => {
-      // Fetch active jobs list
       try {
         const res = await fetch('/api/ai/batch-status?list=active')
-        if (res.ok) {
-          const jobs: JobState[] = await res.json()
-          setActiveJobs(jobs)
-        }
+        if (res.ok) setActiveJobs(await res.json())
       } catch { /* ignore */ }
+    }
+    tick()
+    pollRef.current = setInterval(tick, 5000)
+  }, [])
 
-      // Fetch selected job detail (with logs)
-      if (selectedJob?.id) {
-        try {
-          const res = await fetch(`/api/ai/batch-status?job_id=${selectedJob.id}`)
-          if (res.ok) {
-            const data = await res.json()
-            setSelectedJob(data)
+  useEffect(() => {
+    pollActiveJobs()
+    return () => { if (pollRef.current) clearInterval(pollRef.current) }
+  }, [pollActiveJobs])
+
+  // Core: run chunks in a loop
+  const runChunkLoop = useCallback(async (jobId: string) => {
+    if (runningRef.current) return
+    runningRef.current = true
+    stoppedRef.current = false
+
+    while (!stoppedRef.current) {
+      try {
+        const res = await fetch('/api/ai/batch-generate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'resume', job_id: jobId }),
+        })
+
+        const data = await res.json()
+
+        if (!res.ok || data.error) {
+          // Job was stopped externally or error
+          setActiveJob((prev) => prev ? { ...prev, status: data.status || 'error' } : prev)
+          break
+        }
+
+        // Update local state from response
+        setActiveJob((prev) => {
+          if (!prev) return prev
+          const newLogs = [...(prev.logs || []), ...(data.results || [])]
+          return {
+            ...prev,
+            current: data.current,
+            total: data.total,
+            success_count: newLogs.filter((l) => l.status === 'success').length,
+            error_count: newLogs.filter((l) => l.status === 'error').length,
+            logs: newLogs,
+            status: data.status,
           }
-        } catch { /* ignore */ }
+        })
+
+        if (data.status === 'done') break
+      } catch {
+        // Network error, wait a bit and retry
+        await new Promise((r) => setTimeout(r, 3000))
       }
     }
 
-    tick()
-    pollRef.current = setInterval(tick, 3000)
-  }, [selectedJob?.id])
-
-  useEffect(() => {
-    pollAll()
-    return () => { if (pollRef.current) clearInterval(pollRef.current) }
-  }, [pollAll])
+    runningRef.current = false
+    // Refresh active jobs list
+    try {
+      const res = await fetch('/api/ai/batch-status?list=active')
+      if (res.ok) setActiveJobs(await res.json())
+    } catch { /* ignore */ }
+  }, [])
 
   const handleStart = async () => {
     setMessage('')
@@ -89,21 +126,16 @@ export default function AIGeneratePage() {
     const res = await fetch('/api/ai/batch-generate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        app_id: currentApp,
-        category: selectedCategory,
-        overwrite,
-      }),
+      body: JSON.stringify({ app_id: currentApp, category: selectedCategory, overwrite }),
     })
 
     const data = await res.json()
 
     if (data.error && data.total === 0) {
-      setMessage('All questions in this category already have explanations. Check "Overwrite" to regenerate.')
+      setMessage('All questions already have explanations. Check "Overwrite" to regenerate.')
       return
     }
 
-    // Duplicate job protection: auto-select existing job
     if (data.existing_job_id) {
       setMessage(data.error)
       handleSelectJob(data.existing_job_id)
@@ -115,7 +147,7 @@ export default function AIGeneratePage() {
       return
     }
 
-    setMessage(`Job started. Processing ${data.total} questions (${data.skipped} skipped).`)
+    setMessage(`Started. Processing ${data.total} questions (${data.skipped} skipped).`)
     const newJob: JobState = {
       id: data.job_id,
       status: 'running',
@@ -128,27 +160,36 @@ export default function AIGeneratePage() {
       logs: [],
       started_at: new Date().toISOString(),
     }
-    setSelectedJob(newJob)
+    setActiveJob(newJob)
+
+    // Start chunk loop
+    runChunkLoop(data.job_id)
   }
 
   const handleStop = async (jobId: string) => {
+    stoppedRef.current = true
     await fetch('/api/ai/batch-generate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'stop', job_id: jobId }),
     })
+    setActiveJob((prev) => prev && prev.id === jobId ? { ...prev, status: 'stopped' } : prev)
   }
 
   const handleSelectJob = async (jobId: string) => {
-    if (selectedJob?.id === jobId) return
     const res = await fetch(`/api/ai/batch-status?job_id=${jobId}`)
     if (res.ok) {
-      setSelectedJob(await res.json())
+      const data = await res.json()
+      setActiveJob(data)
+      // If it's running, start driving it
+      if (data.status === 'running') {
+        runChunkLoop(jobId)
+      }
     }
   }
 
-  const isRunning = selectedJob?.status === 'running' || selectedJob?.status === 'stopping'
-  const pct = selectedJob && selectedJob.total > 0 ? Math.round((selectedJob.current / selectedJob.total) * 100) : 0
+  const isRunning = activeJob?.status === 'running'
+  const pct = activeJob && activeJob.total > 0 ? Math.round((activeJob.current / activeJob.total) * 100) : 0
 
   const statusLabel = (status: string) => {
     switch (status) {
@@ -197,11 +238,7 @@ export default function AIGeneratePage() {
 
           <label style={{ fontSize: '14px', fontWeight: '600', display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 0' }}>
-              <input
-                type="checkbox"
-                checked={overwrite}
-                onChange={(e) => setOverwrite(e.target.checked)}
-              />
+              <input type="checkbox" checked={overwrite} onChange={(e) => setOverwrite(e.target.checked)} />
               <span style={{ fontWeight: 'normal' }}>Overwrite existing explanations</span>
             </div>
           </label>
@@ -215,15 +252,12 @@ export default function AIGeneratePage() {
 
         <button
           onClick={handleStart}
-          disabled={!selectedCategory}
+          disabled={!selectedCategory || (isRunning && runningRef.current)}
           style={{
             padding: '12px 24px',
-            backgroundColor: selectedCategory ? '#7c3aed' : '#ccc',
-            color: 'white',
-            border: 'none',
-            borderRadius: '8px',
-            fontSize: '15px',
-            cursor: selectedCategory ? 'pointer' : 'not-allowed',
+            backgroundColor: selectedCategory && !(isRunning && runningRef.current) ? '#7c3aed' : '#ccc',
+            color: 'white', border: 'none', borderRadius: '8px', fontSize: '15px',
+            cursor: selectedCategory && !(isRunning && runningRef.current) ? 'pointer' : 'not-allowed',
           }}
         >
           Start Batch Generate
@@ -237,21 +271,14 @@ export default function AIGeneratePage() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
             {activeJobs.map((aj) => {
               const ajPct = aj.total > 0 ? Math.round((aj.current / aj.total) * 100) : 0
-              const isSelected = selectedJob?.id === aj.id
+              const isSelected = activeJob?.id === aj.id
 
               return (
-                <div
-                  key={aj.id}
-                  onClick={() => handleSelectJob(aj.id)}
-                  style={{
-                    backgroundColor: 'white',
-                    border: isSelected ? '2px solid #7c3aed' : '1px solid #eee',
-                    borderRadius: '10px',
-                    padding: '14px 18px',
-                    cursor: 'pointer',
-                    transition: 'all 0.15s',
-                  }}
-                >
+                <div key={aj.id} onClick={() => handleSelectJob(aj.id)} style={{
+                  backgroundColor: 'white',
+                  border: isSelected ? '2px solid #7c3aed' : '1px solid #eee',
+                  borderRadius: '10px', padding: '14px 18px', cursor: 'pointer', transition: 'all 0.15s',
+                }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
                     <span style={{
                       padding: '2px 8px', borderRadius: '10px', fontSize: '11px', fontWeight: '600',
@@ -264,29 +291,20 @@ export default function AIGeneratePage() {
                     <span style={{ fontSize: '12px', color: '#999', marginLeft: 'auto' }}>
                       {aj.current}/{aj.total} ({ajPct}%)
                     </span>
-                    {(aj.status === 'running' || aj.status === 'stopping') && (
-                      <button
-                        onClick={(e) => { e.stopPropagation(); handleStop(aj.id) }}
-                        disabled={aj.status === 'stopping'}
-                        style={{
-                          padding: '4px 12px',
-                          backgroundColor: aj.status === 'stopping' ? '#999' : '#dc3545',
-                          color: 'white',
-                          border: 'none',
-                          borderRadius: '5px',
-                          fontSize: '12px',
-                          cursor: aj.status === 'stopping' ? 'not-allowed' : 'pointer',
-                        }}
-                      >
-                        {aj.status === 'stopping' ? 'Stopping...' : 'Stop'}
-                      </button>
-                    )}
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handleStop(aj.id) }}
+                      style={{
+                        padding: '4px 12px', backgroundColor: '#dc3545', color: 'white',
+                        border: 'none', borderRadius: '5px', fontSize: '12px', cursor: 'pointer',
+                      }}
+                    >
+                      Stop
+                    </button>
                   </div>
                   <div style={{ width: '100%', height: '4px', backgroundColor: '#e5e7eb', borderRadius: '2px', overflow: 'hidden' }}>
                     <div style={{
                       width: `${ajPct}%`, height: '100%',
-                      backgroundColor: statusColor(aj.status),
-                      borderRadius: '2px', transition: 'width 0.3s',
+                      backgroundColor: statusColor(aj.status), borderRadius: '2px', transition: 'width 0.3s',
                     }} />
                   </div>
                 </div>
@@ -297,58 +315,52 @@ export default function AIGeneratePage() {
       )}
 
       {/* Selected Job Detail */}
-      {selectedJob && selectedJob.total > 0 && (
+      {activeJob && activeJob.total > 0 && (
         <div style={{ backgroundColor: 'white', padding: '24px', borderRadius: '12px', border: '1px solid #eee', marginBottom: '24px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
             <span style={{ fontSize: '14px', fontWeight: '600' }}>
-              {statusLabel(selectedJob.status)} — {selectedJob.category} — {selectedJob.current} / {selectedJob.total}
+              {statusLabel(activeJob.status)} — {activeJob.category} — {activeJob.current} / {activeJob.total}
             </span>
-            <span style={{ fontSize: '14px', color: '#666' }}>{pct}%</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <span style={{ fontSize: '14px', color: '#666' }}>{pct}%</span>
+              {activeJob.status === 'running' && (
+                <button onClick={() => handleStop(activeJob.id)} style={{
+                  padding: '6px 14px', backgroundColor: '#dc3545', color: 'white',
+                  border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '13px',
+                }}>
+                  Stop
+                </button>
+              )}
+            </div>
           </div>
 
           <div style={{ width: '100%', height: '8px', backgroundColor: '#e5e7eb', borderRadius: '4px', overflow: 'hidden' }}>
-            <div
-              style={{
-                width: `${pct}%`,
-                height: '100%',
-                backgroundColor: selectedJob.status === 'done' ? '#16a34a' : selectedJob.status === 'error' ? '#dc2626' : '#7c3aed',
-                borderRadius: '4px',
-                transition: 'width 0.3s',
-              }}
-            />
+            <div style={{
+              width: `${pct}%`, height: '100%',
+              backgroundColor: activeJob.status === 'done' ? '#16a34a' : activeJob.status === 'error' ? '#dc2626' : '#7c3aed',
+              borderRadius: '4px', transition: 'width 0.3s',
+            }} />
           </div>
 
           <div style={{ display: 'flex', gap: '16px', marginTop: '12px', fontSize: '13px' }}>
-            <span style={{ color: '#16a34a' }}>Success: {selectedJob.success_count}</span>
-            {selectedJob.error_count > 0 && <span style={{ color: '#dc2626' }}>Errors: {selectedJob.error_count}</span>}
+            <span style={{ color: '#16a34a' }}>Success: {activeJob.success_count}</span>
+            {activeJob.error_count > 0 && <span style={{ color: '#dc2626' }}>Errors: {activeJob.error_count}</span>}
           </div>
         </div>
       )}
 
-      {/* Log for selected job */}
-      {selectedJob?.logs && selectedJob.logs.length > 0 && (
+      {/* Log */}
+      {activeJob?.logs && activeJob.logs.length > 0 && (
         <div style={{
-          backgroundColor: 'white',
-          padding: '16px',
-          borderRadius: '12px',
-          border: '1px solid #eee',
-          maxHeight: '400px',
-          overflowY: 'auto',
+          backgroundColor: 'white', padding: '16px', borderRadius: '12px',
+          border: '1px solid #eee', maxHeight: '400px', overflowY: 'auto',
         }}>
-          <h3 style={{ fontSize: '14px', fontWeight: '600', marginBottom: '12px' }}>
-            Log — {selectedJob.category}
-          </h3>
-          {selectedJob.logs.map((log, i) => (
-            <div
-              key={i}
-              style={{
-                padding: '6px 0',
-                borderBottom: '1px solid #f5f5f5',
-                fontSize: '13px',
-                fontFamily: 'monospace',
-                color: log.status === 'error' ? '#dc2626' : '#333',
-              }}
-            >
+          <h3 style={{ fontSize: '14px', fontWeight: '600', marginBottom: '12px' }}>Log — {activeJob.category}</h3>
+          {activeJob.logs.map((log, i) => (
+            <div key={i} style={{
+              padding: '6px 0', borderBottom: '1px solid #f5f5f5', fontSize: '13px', fontFamily: 'monospace',
+              color: log.status === 'error' ? '#dc2626' : '#333',
+            }}>
               <span style={{ color: '#999', marginRight: '8px' }}>[{i + 1}]</span>
               <span style={{ marginRight: '8px' }}>{log.questionId}</span>
               <span style={{ color: log.status === 'success' ? '#16a34a' : log.status === 'skipped' ? '#999' : '#dc2626' }}>
