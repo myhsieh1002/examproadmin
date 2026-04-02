@@ -21,11 +21,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Email is required' }, { status: 400 })
   }
 
-  // Create auth user with Supabase Admin API
-  const { data: authUser, error: authError } = await supabase.auth.admin.createUser({
-    email,
-    email_confirm: true,
-    password: crypto.randomUUID(), // random initial password
+  // Invite user by email (Supabase sends invitation email automatically)
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://examproadmin.vercel.app'
+  const { data: authUser, error: authError } = await supabase.auth.admin.inviteUserByEmail(email, {
+    redirectTo: siteUrl,
   })
 
   if (authError) {
@@ -52,16 +51,5 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
-  // Generate password reset link so the user can set their own password
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://examproadmin.vercel.app'
-  const { data: linkData } = await supabase.auth.admin.generateLink({
-    type: 'recovery',
-    email,
-    options: { redirectTo: siteUrl },
-  })
-
-  return NextResponse.json({
-    user: data,
-    recovery_link: linkData?.properties?.action_link || null,
-  }, { status: 201 })
+  return NextResponse.json({ user: data, invited: true }, { status: 201 })
 }

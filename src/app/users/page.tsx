@@ -59,11 +59,7 @@ export default function UsersPage() {
     if (res.ok) {
       setShowInvite(false)
       setInviteForm({ email: '', display_name: '', role: 'editor', allowed_apps: [], allowed_categories: '' })
-      if (data.recovery_link) {
-        setMessage(`User invited. Recovery link: ${data.recovery_link}`)
-      } else {
-        setMessage('User invited successfully.')
-      }
+      setMessage(`Invitation email sent to ${inviteForm.email}. User can set password via the link in the email.`)
       await loadUsers()
     } else {
       alert(`Error: ${data.error}`)
