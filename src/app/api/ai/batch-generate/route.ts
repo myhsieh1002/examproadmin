@@ -42,15 +42,23 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Job not found or not running', status: job?.status }, { status: 400 })
     }
 
-    // Fetch questions that still need processing
-    let query = supabase
-      .from('questions')
-      .select('id, question, options, answer, category, source, explanation_encrypted, tags')
-      .eq('app_id', job.app_id)
-      .eq('category', job.category)
-      .order('id')
-
-    const { data: allQuestions } = await query
+    // Fetch ALL questions (bypass Supabase default 1000 limit)
+    const allQuestions: any[] = []
+    let from = 0
+    const pageSize = 1000
+    while (true) {
+      const { data: batch } = await supabase
+        .from('questions')
+        .select('id, question, options, answer, category, source, explanation_encrypted, tags')
+        .eq('app_id', job.app_id)
+        .eq('category', job.category)
+        .order('id')
+        .range(from, from + pageSize - 1)
+      if (!batch || batch.length === 0) break
+      allQuestions.push(...batch)
+      if (batch.length < pageSize) break
+      from += pageSize
+    }
     if (!allQuestions) return NextResponse.json({ error: 'Failed to fetch questions' }, { status: 500 })
 
     // Filter to unprocessed
@@ -168,13 +176,26 @@ ${q.source ? `來源：${q.source}` : ''}`
     }, { status: 409 })
   }
 
-  // Fetch questions
-  const { data: questions, error } = await supabase
-    .from('questions')
-    .select('id, question, options, answer, category, source, explanation_encrypted')
-    .eq('app_id', app_id)
-    .eq('category', category)
-    .order('id')
+  // Fetch ALL questions (bypass Supabase default 1000 limit)
+  const questions: any[] = []
+  let startFrom = 0
+  const pSize = 1000
+  let fetchError = null
+  while (true) {
+    const { data: batch, error: err } = await supabase
+      .from('questions')
+      .select('id, question, options, answer, category, source, explanation_encrypted')
+      .eq('app_id', app_id)
+      .eq('category', category)
+      .order('id')
+      .range(startFrom, startFrom + pSize - 1)
+    if (err) { fetchError = err; break }
+    if (!batch || batch.length === 0) break
+    questions.push(...batch)
+    if (batch.length < pSize) break
+    startFrom += pSize
+  }
+  const error = fetchError
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 

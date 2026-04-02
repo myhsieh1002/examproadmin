@@ -33,11 +33,20 @@ export async function GET(request: NextRequest) {
 
   // Utility: explanation stats per app and per category
   if (action === 'explanation-stats') {
-    // Total with explanation per app
-    const { data: allQ } = await supabase
-      .from('questions')
-      .select('category, explanation_encrypted')
-      .eq('app_id', appId || '')
+    // Fetch ALL questions (bypass Supabase default 1000 limit)
+    const allQ: { category: string; explanation_encrypted: string }[] = []
+    let statsFrom = 0
+    while (true) {
+      const { data: batch } = await supabase
+        .from('questions')
+        .select('category, explanation_encrypted')
+        .eq('app_id', appId || '')
+        .range(statsFrom, statsFrom + 999)
+      if (!batch || batch.length === 0) break
+      allQ.push(...batch)
+      if (batch.length < 1000) break
+      statsFrom += 1000
+    }
 
     const stats: Record<string, { total: number; withExplanation: number }> = {}
     let appTotal = 0, appWithExp = 0
