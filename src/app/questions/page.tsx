@@ -132,6 +132,7 @@ export default function QuestionsPage() {
                     <Link href={`/questions/${q.id}`} style={{ color: '#0f3460', textDecoration: 'none' }}>{q.id}</Link>
                   </td>
                   <td style={{ padding: '12px 16px', fontSize: '14px' }}>
+                    {q.tags?.includes('answer_disputed') && <span title="Answer disputed by AI" style={{ marginRight: '4px' }}>⚠️</span>}
                     {q.image_name && <span title="Has image" style={{ marginRight: '4px' }}>📷</span>}
                     {q.question.length > 80 ? q.question.slice(0, 80) + '...' : q.question}
                   </td>

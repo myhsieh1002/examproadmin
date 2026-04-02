@@ -7,6 +7,7 @@ interface LogEntry {
   questionId: string
   status: 'success' | 'error' | 'skipped'
   error?: string
+  flagged?: boolean
 }
 
 interface JobState {
@@ -366,6 +367,7 @@ export default function AIGeneratePage() {
               <span style={{ color: log.status === 'success' ? '#16a34a' : log.status === 'skipped' ? '#999' : '#dc2626' }}>
                 {log.status === 'success' ? 'OK' : log.status === 'skipped' ? 'SKIPPED' : `ERROR: ${log.error}`}
               </span>
+              {log.flagged && <span style={{ color: '#f59e0b', marginLeft: '8px', fontWeight: '600' }}>⚠️ FLAGGED</span>}
             </div>
           ))}
           <div ref={logEndRef} />

@@ -13,7 +13,11 @@ const SYSTEM_PROMPT = `你是一位台灣醫護國家考試的專業講師，擁
 3. 補充相關的臨床知識或考試重點
 4. 使用繁體中文
 5. 保持專業但易讀，適合考生複習
-6. 不要使用 markdown 格式（不要 #、**、- 等），使用純文字`
+6. 不要使用 markdown 格式（不要 #、**、- 等），使用純文字
+
+最後，請判斷提供的正確答案是否正確。如果你認為答案有誤或有爭議，請在詳解最末加上一行：
+[答案疑慮] 理由簡述
+如果答案正確，則不需要加這行。`
 
 export async function POST(request: NextRequest) {
   try {
@@ -46,7 +50,9 @@ ${source ? `來源：${source}` : ''}`
       .map((block) => block.text)
       .join('')
 
-    return NextResponse.json({ explanation })
+    const flagged = explanation.includes('[答案疑慮]')
+
+    return NextResponse.json({ explanation, flagged })
   } catch (error: unknown) {
     const errMsg = error instanceof Error ? error.message : 'Unknown error'
     return NextResponse.json({ error: errMsg }, { status: 500 })

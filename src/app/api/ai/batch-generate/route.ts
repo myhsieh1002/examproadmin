@@ -7,7 +7,7 @@ const client = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
 })
 
-const BATCH_SIZE = 10
+const BATCH_SIZE = 3
 
 const SYSTEM_PROMPT = `你是一位台灣醫護國家考試的專業講師，擁有豐富的臨床與教學經驗。請為考題撰寫詳解。
 
@@ -17,7 +17,11 @@ const SYSTEM_PROMPT = `你是一位台灣醫護國家考試的專業講師，擁
 3. 補充相關的臨床知識或考試重點
 4. 使用繁體中文
 5. 保持專業但易讀，適合考生複習
-6. 不要使用 markdown 格式（不要 #、**、- 等），使用純文字`
+6. 不要使用 markdown 格式（不要 #、**、- 等），使用純文字
+
+最後，請判斷提供的正確答案是否正確。如果你認為答案有誤或有爭議，請在詳解最末加上一行：
+[答案疑慮] 理由簡述
+如果答案正確，則不需要加這行。`
 
 export async function POST(request: NextRequest) {
   const body = await request.json()
@@ -41,7 +45,7 @@ export async function POST(request: NextRequest) {
     // Fetch questions that still need processing
     let query = supabase
       .from('questions')
-      .select('id, question, options, answer, category, source, explanation_encrypted')
+      .select('id, question, options, answer, category, source, explanation_encrypted, tags')
       .eq('app_id', job.app_id)
       .eq('category', job.category)
       .order('id')
@@ -70,7 +74,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Process chunk
-    const results: { questionId: string; status: 'success' | 'error'; error?: string }[] = []
+    const results: { questionId: string; status: 'success' | 'error'; error?: string; flagged?: boolean }[] = []
 
     for (const q of chunk) {
       try {
@@ -97,10 +101,20 @@ ${q.source ? `來源：${q.source}` : ''}`
           .map((block) => block.text)
           .join('')
 
-        const encrypted = encrypt(explanation)
-        await supabase.from('questions').update({ explanation_encrypted: encrypted }).eq('id', q.id)
+        // Detect answer dispute flag
+        const flagged = explanation.includes('[答案疑慮]')
 
-        results.push({ questionId: q.id, status: 'success' })
+        // Update question: encrypted explanation + tag if flagged
+        const updateData: Record<string, unknown> = { explanation_encrypted: encrypt(explanation) }
+        if (flagged) {
+          const currentTags: string[] = q.tags || []
+          if (!currentTags.includes('answer_disputed')) {
+            updateData.tags = [...currentTags, 'answer_disputed']
+          }
+        }
+        await supabase.from('questions').update(updateData).eq('id', q.id)
+
+        results.push({ questionId: q.id, status: 'success', flagged })
       } catch (err: unknown) {
         const errMsg = err instanceof Error ? err.message : 'Unknown error'
         results.push({ questionId: q.id, status: 'error', error: errMsg })
