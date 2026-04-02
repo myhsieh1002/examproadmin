@@ -1,12 +1,22 @@
 'use client'
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, useRef, useCallback } from 'react'
 import { useCurrentApp } from '@/hooks/useCurrentApp'
 import type { Category } from '@/lib/types'
 
 interface LogEntry {
   questionId: string
-  status: 'success' | 'error'
+  status: 'success' | 'error' | 'skipped'
   error?: string
+}
+
+interface JobState {
+  id: string
+  status: 'running' | 'stopping' | 'done' | 'stopped' | 'error'
+  total: number
+  current: number
+  success_count: number
+  error_count: number
+  logs: LogEntry[]
 }
 
 export default function AIGeneratePage() {
@@ -14,11 +24,9 @@ export default function AIGeneratePage() {
   const [categories, setCategories] = useState<Category[]>([])
   const [selectedCategory, setSelectedCategory] = useState('')
   const [overwrite, setOverwrite] = useState(false)
-  const [running, setRunning] = useState(false)
-  const [progress, setProgress] = useState({ current: 0, total: 0 })
-  const [logs, setLogs] = useState<LogEntry[]>([])
-  const [stats, setStats] = useState<{ total: number; withExplanation: number } | null>(null)
-  const abortRef = useRef<AbortController | null>(null)
+  const [job, setJob] = useState<JobState | null>(null)
+  const [message, setMessage] = useState('')
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const logEndRef = useRef<HTMLDivElement>(null)
 
   // Load categories
@@ -28,113 +36,104 @@ export default function AIGeneratePage() {
       .then(setCategories)
       .catch(() => {})
     setSelectedCategory('')
-    setStats(null)
   }, [currentApp])
-
-  // Load stats when category selected
-  useEffect(() => {
-    if (!selectedCategory) {
-      setStats(null)
-      return
-    }
-    async function loadStats() {
-      const params = new URLSearchParams({ app_id: currentApp, category: selectedCategory, limit: '1' })
-      const res = await fetch(`/api/questions?${params}`)
-      if (!res.ok) return
-      const { total } = await res.json()
-
-      // Count questions with explanation
-      const res2 = await fetch(`/api/ai/batch-generate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ app_id: currentApp, category: selectedCategory, dryRun: true }),
-      }).catch(() => null)
-
-      // Simple approach: just show total for now
-      setStats({ total, withExplanation: 0 })
-    }
-    loadStats()
-  }, [currentApp, selectedCategory])
 
   // Auto-scroll logs
   useEffect(() => {
     logEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [logs])
+  }, [job?.logs?.length])
+
+  // Cleanup polling on unmount
+  useEffect(() => {
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current)
+    }
+  }, [])
+
+  const startPolling = useCallback((jobId: string) => {
+    if (pollRef.current) clearInterval(pollRef.current)
+
+    pollRef.current = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/ai/batch-status?job_id=${jobId}`)
+        if (!res.ok) return
+        const data = await res.json()
+        setJob(data)
+
+        // Stop polling when job is done
+        if (['done', 'stopped', 'error'].includes(data.status)) {
+          if (pollRef.current) clearInterval(pollRef.current)
+          pollRef.current = null
+        }
+      } catch {
+        // network error, keep polling
+      }
+    }, 3000)
+  }, [])
 
   const handleStart = async () => {
-    setRunning(true)
-    setLogs([])
-    setProgress({ current: 0, total: 0 })
+    setMessage('')
+    setJob(null)
 
-    const controller = new AbortController()
-    abortRef.current = controller
+    const res = await fetch('/api/ai/batch-generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        app_id: currentApp,
+        category: selectedCategory,
+        overwrite,
+      }),
+    })
 
-    try {
-      const res = await fetch('/api/ai/batch-generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          app_id: currentApp,
-          category: selectedCategory,
-          overwrite,
-        }),
-        signal: controller.signal,
-      })
+    const data = await res.json()
 
-      if (!res.ok || !res.body) {
-        setRunning(false)
-        return
-      }
-
-      const reader = res.body.getReader()
-      const decoder = new TextDecoder()
-      let buffer = ''
-
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-
-        buffer += decoder.decode(value, { stream: true })
-        const lines = buffer.split('\n\n')
-        buffer = lines.pop() || ''
-
-        for (const line of lines) {
-          if (!line.startsWith('data: ')) continue
-          try {
-            const data = JSON.parse(line.slice(6))
-            if (data.type === 'start') {
-              setProgress({ current: 0, total: data.total })
-            } else if (data.type === 'progress') {
-              setProgress({ current: data.current, total: data.total })
-              setLogs((prev) => [
-                ...prev,
-                { questionId: data.questionId, status: data.status, error: data.error },
-              ])
-            } else if (data.type === 'done') {
-              // done
-            }
-          } catch {
-            // skip invalid JSON
-          }
-        }
-      }
-    } catch (err: unknown) {
-      if (err instanceof Error && err.name !== 'AbortError') {
-        setLogs((prev) => [...prev, { questionId: '-', status: 'error', error: err instanceof Error ? err.message : 'Unknown error' }])
-      }
+    if (data.error && data.total === 0) {
+      setMessage('All questions in this category already have explanations. Check "Overwrite" to regenerate.')
+      return
     }
 
-    setRunning(false)
-    abortRef.current = null
+    if (!data.job_id) {
+      setMessage(`Error: ${data.error || 'Failed to start job'}`)
+      return
+    }
+
+    setMessage(`Job started. Processing ${data.total} questions (${data.skipped} skipped).`)
+    setJob({
+      id: data.job_id,
+      status: 'running',
+      total: data.total,
+      current: 0,
+      success_count: 0,
+      error_count: 0,
+      logs: [],
+    })
+
+    startPolling(data.job_id)
   }
 
-  const handleStop = () => {
-    abortRef.current?.abort()
+  const handleStop = async () => {
+    if (!job) return
+    await fetch('/api/ai/batch-generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'stop', job_id: job.id }),
+    })
+    setMessage('Stopping... will finish current question.')
   }
 
-  const pct = progress.total > 0 ? Math.round((progress.current / progress.total) * 100) : 0
-  const successCount = logs.filter((l) => l.status === 'success').length
-  const errorCount = logs.filter((l) => l.status === 'error').length
+  const isRunning = job?.status === 'running' || job?.status === 'stopping'
+  const pct = job && job.total > 0 ? Math.round((job.current / job.total) * 100) : 0
+
+  const statusLabel = (status: string) => {
+    switch (status) {
+      case 'running': return '🔄 Running'
+      case 'stopping': return '⏳ Stopping...'
+      case 'done': return '✅ Completed'
+      case 'stopped': return '⏹️ Stopped'
+      case 'error': return '❌ Error'
+      default: return status
+    }
+  }
 
   return (
     <div style={{ maxWidth: '900px' }}>
@@ -148,7 +147,7 @@ export default function AIGeneratePage() {
             <select
               value={selectedCategory}
               onChange={(e) => setSelectedCategory(e.target.value)}
-              disabled={running}
+              disabled={isRunning}
               style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '6px', marginTop: '4px' }}
             >
               <option value="">-- Select Category --</option>
@@ -166,21 +165,21 @@ export default function AIGeneratePage() {
                 type="checkbox"
                 checked={overwrite}
                 onChange={(e) => setOverwrite(e.target.checked)}
-                disabled={running}
+                disabled={isRunning}
               />
               <span style={{ fontWeight: 'normal' }}>Overwrite existing explanations</span>
             </div>
           </label>
         </div>
 
-        {stats && selectedCategory && (
-          <p style={{ fontSize: '14px', color: '#666', marginBottom: '16px' }}>
-            Total questions in this category: <strong>{stats.total}</strong>
+        {message && (
+          <p style={{ fontSize: '14px', color: '#666', marginBottom: '16px', padding: '10px', backgroundColor: '#f9f9f9', borderRadius: '6px' }}>
+            {message}
           </p>
         )}
 
         <div style={{ display: 'flex', gap: '12px' }}>
-          {!running ? (
+          {!isRunning ? (
             <button
               onClick={handleStart}
               disabled={!selectedCategory}
@@ -199,39 +198,39 @@ export default function AIGeneratePage() {
           ) : (
             <button
               onClick={handleStop}
+              disabled={job?.status === 'stopping'}
               style={{
                 padding: '12px 24px',
-                backgroundColor: '#dc3545',
+                backgroundColor: job?.status === 'stopping' ? '#999' : '#dc3545',
                 color: 'white',
                 border: 'none',
                 borderRadius: '8px',
                 fontSize: '15px',
-                cursor: 'pointer',
+                cursor: job?.status === 'stopping' ? 'not-allowed' : 'pointer',
               }}
             >
-              Stop
+              {job?.status === 'stopping' ? 'Stopping...' : 'Stop'}
             </button>
           )}
         </div>
       </div>
 
       {/* Progress */}
-      {progress.total > 0 && (
+      {job && job.total > 0 && (
         <div style={{ backgroundColor: 'white', padding: '24px', borderRadius: '12px', border: '1px solid #eee', marginBottom: '24px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
             <span style={{ fontSize: '14px', fontWeight: '600' }}>
-              Progress: {progress.current} / {progress.total}
+              {statusLabel(job.status)} — {job.current} / {job.total}
             </span>
             <span style={{ fontSize: '14px', color: '#666' }}>{pct}%</span>
           </div>
 
-          {/* Progress bar */}
           <div style={{ width: '100%', height: '8px', backgroundColor: '#e5e7eb', borderRadius: '4px', overflow: 'hidden' }}>
             <div
               style={{
                 width: `${pct}%`,
                 height: '100%',
-                backgroundColor: '#7c3aed',
+                backgroundColor: job.status === 'done' ? '#16a34a' : job.status === 'error' ? '#dc2626' : '#7c3aed',
                 borderRadius: '4px',
                 transition: 'width 0.3s',
               }}
@@ -239,14 +238,14 @@ export default function AIGeneratePage() {
           </div>
 
           <div style={{ display: 'flex', gap: '16px', marginTop: '12px', fontSize: '13px' }}>
-            <span style={{ color: '#16a34a' }}>Success: {successCount}</span>
-            {errorCount > 0 && <span style={{ color: '#dc2626' }}>Errors: {errorCount}</span>}
+            <span style={{ color: '#16a34a' }}>Success: {job.success_count}</span>
+            {job.error_count > 0 && <span style={{ color: '#dc2626' }}>Errors: {job.error_count}</span>}
           </div>
         </div>
       )}
 
       {/* Log */}
-      {logs.length > 0 && (
+      {job && job.logs && job.logs.length > 0 && (
         <div style={{
           backgroundColor: 'white',
           padding: '16px',
@@ -256,7 +255,7 @@ export default function AIGeneratePage() {
           overflowY: 'auto',
         }}>
           <h3 style={{ fontSize: '14px', fontWeight: '600', marginBottom: '12px' }}>Log</h3>
-          {logs.map((log, i) => (
+          {job.logs.map((log, i) => (
             <div
               key={i}
               style={{
@@ -269,8 +268,8 @@ export default function AIGeneratePage() {
             >
               <span style={{ color: '#999', marginRight: '8px' }}>[{i + 1}]</span>
               <span style={{ marginRight: '8px' }}>{log.questionId}</span>
-              <span style={{ color: log.status === 'success' ? '#16a34a' : '#dc2626' }}>
-                {log.status === 'success' ? 'OK' : `ERROR: ${log.error}`}
+              <span style={{ color: log.status === 'success' ? '#16a34a' : log.status === 'skipped' ? '#999' : '#dc2626' }}>
+                {log.status === 'success' ? 'OK' : log.status === 'skipped' ? 'SKIPPED' : `ERROR: ${log.error}`}
               </span>
             </div>
           ))}
