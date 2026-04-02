@@ -53,9 +53,11 @@ export async function POST(request: NextRequest) {
   }
 
   // Generate password reset link so the user can set their own password
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://examproadmin.vercel.app'
   const { data: linkData } = await supabase.auth.admin.generateLink({
     type: 'recovery',
     email,
+    options: { redirectTo: siteUrl },
   })
 
   return NextResponse.json({
