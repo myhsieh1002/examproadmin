@@ -1,18 +1,22 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { useCurrentApp } from '@/hooks/useCurrentApp'
+
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
 
 export default function EditQuestionPage() {
   const router = useRouter()
   const params = useParams()
-  const { userId } = useCurrentApp()
+  const { userId, currentApp } = useCurrentApp()
   const id = params.id as string
   const [question, setQuestion] = useState<any>(null)
   const [saving, setSaving] = useState(false)
   const [generating, setGenerating] = useState(false)
+  const [uploading, setUploading] = useState(false)
   const [message, setMessage] = useState('')
   const [editorName, setEditorName] = useState<string | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     fetch(`/api/questions/${id}`).then(r => r.json()).then(data => {
@@ -77,6 +81,35 @@ export default function EditQuestionPage() {
     }
     setGenerating(false)
   }
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setUploading(true)
+    setMessage('')
+    const formData = new FormData()
+    formData.append('file', file)
+    formData.append('app_id', question.app_id || currentApp)
+    try {
+      const res = await fetch('/api/images', { method: 'POST', body: formData })
+      if (res.ok) {
+        const data = await res.json()
+        setQuestion({ ...question, image_name: data.file_name })
+        setMessage('Image uploaded. Remember to Save.')
+      } else {
+        const err = await res.json()
+        setMessage(`Error: ${err.error}`)
+      }
+    } catch {
+      setMessage('Error: Failed to upload image')
+    }
+    setUploading(false)
+    if (fileInputRef.current) fileInputRef.current.value = ''
+  }
+
+  const imageUrl = question?.image_name
+    ? `${SUPABASE_URL}/storage/v1/object/public/question-images/${question.app_id || currentApp}/${question.image_name}`
+    : null
 
   const handleDelete = async () => {
     if (!confirm('Are you sure you want to delete this question?')) return
@@ -192,6 +225,47 @@ export default function EditQuestionPage() {
           <input value={question.source || ''} onChange={(e) => setQuestion({ ...question, source: e.target.value })}
             style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '6px', marginTop: '4px' }} />
         </label>
+
+        {/* Image */}
+        <div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+            <span style={{ fontSize: '14px', fontWeight: '600' }}>Image</span>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploading}
+                style={{
+                  padding: '6px 14px', backgroundColor: uploading ? '#ccc' : '#0f3460', color: 'white',
+                  border: 'none', borderRadius: '6px', cursor: uploading ? 'not-allowed' : 'pointer', fontSize: '13px',
+                }}
+              >
+                {uploading ? 'Uploading...' : question.image_name ? 'Replace Image' : 'Upload Image'}
+              </button>
+              {question.image_name && (
+                <button
+                  onClick={() => setQuestion({ ...question, image_name: null })}
+                  style={{
+                    padding: '6px 14px', backgroundColor: '#dc3545', color: 'white',
+                    border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '13px',
+                  }}
+                >
+                  Remove
+                </button>
+              )}
+            </div>
+          </div>
+          <input ref={fileInputRef} type="file" accept="image/png,image/jpeg,image/webp" onChange={handleImageUpload} style={{ display: 'none' }} />
+          {imageUrl && (
+            <div style={{ marginTop: '8px', padding: '12px', border: '1px solid #eee', borderRadius: '8px', backgroundColor: '#fafafa' }}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={imageUrl} alt="Question image" style={{ maxWidth: '100%', maxHeight: '300px', borderRadius: '6px' }} />
+              <p style={{ fontSize: '12px', color: '#999', marginTop: '6px' }}>{question.image_name}</p>
+            </div>
+          )}
+          {!question.image_name && (
+            <p style={{ fontSize: '13px', color: '#999', marginTop: '4px' }}>No image attached</p>
+          )}
+        </div>
 
         {/* Last editor info */}
         {(editorName || question.last_edited_at) && (

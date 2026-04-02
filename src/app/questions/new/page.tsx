@@ -1,7 +1,9 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useCurrentApp } from '@/hooks/useCurrentApp'
 import { useRouter } from 'next/navigation'
+
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
 
 export default function NewQuestionPage() {
   const { currentApp, userId } = useCurrentApp()
@@ -16,9 +18,13 @@ export default function NewQuestionPage() {
     difficulty: 2,
     source: '',
     tags: [] as string[],
+    image_name: null as string | null,
   })
   const [saving, setSaving] = useState(false)
   const [loadingId, setLoadingId] = useState(false)
+  const [uploading, setUploading] = useState(false)
+  const [uploadMsg, setUploadMsg] = useState('')
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const fetchNextId = async () => {
     setLoadingId(true)
@@ -103,6 +109,69 @@ export default function NewQuestionPage() {
             rows={3} placeholder="Enter explanation (will be encrypted)..."
             style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '6px', marginTop: '4px', resize: 'vertical' }} />
         </label>
+
+        {/* Image */}
+        <div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+            <span style={{ fontSize: '14px', fontWeight: '600' }}>Image</span>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploading}
+                style={{
+                  padding: '6px 14px', backgroundColor: uploading ? '#ccc' : '#0f3460', color: 'white',
+                  border: 'none', borderRadius: '6px', cursor: uploading ? 'not-allowed' : 'pointer', fontSize: '13px',
+                }}
+              >
+                {uploading ? 'Uploading...' : question.image_name ? 'Replace Image' : 'Upload Image'}
+              </button>
+              {question.image_name && (
+                <button
+                  onClick={() => { setQuestion({ ...question, image_name: null }); setUploadMsg('') }}
+                  style={{
+                    padding: '6px 14px', backgroundColor: '#dc3545', color: 'white',
+                    border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '13px',
+                  }}
+                >
+                  Remove
+                </button>
+              )}
+            </div>
+          </div>
+          <input ref={fileInputRef} type="file" accept="image/png,image/jpeg,image/webp" style={{ display: 'none' }}
+            onChange={async (e) => {
+              const file = e.target.files?.[0]
+              if (!file) return
+              setUploading(true); setUploadMsg('')
+              const formData = new FormData()
+              formData.append('file', file)
+              formData.append('app_id', currentApp)
+              try {
+                const res = await fetch('/api/images', { method: 'POST', body: formData })
+                if (res.ok) {
+                  const data = await res.json()
+                  setQuestion(prev => ({ ...prev, image_name: data.file_name }))
+                  setUploadMsg('Image uploaded.')
+                } else {
+                  const err = await res.json()
+                  setUploadMsg(`Error: ${err.error}`)
+                }
+              } catch { setUploadMsg('Error: Upload failed') }
+              setUploading(false)
+              if (fileInputRef.current) fileInputRef.current.value = ''
+            }}
+          />
+          {uploadMsg && <p style={{ fontSize: '13px', color: uploadMsg.startsWith('Error') ? '#c33' : '#16a34a', marginTop: '4px' }}>{uploadMsg}</p>}
+          {question.image_name && (
+            <div style={{ marginTop: '8px', padding: '12px', border: '1px solid #eee', borderRadius: '8px', backgroundColor: '#fafafa' }}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={`${SUPABASE_URL}/storage/v1/object/public/question-images/${currentApp}/${question.image_name}`} alt="Question image" style={{ maxWidth: '100%', maxHeight: '300px', borderRadius: '6px' }} />
+              <p style={{ fontSize: '12px', color: '#999', marginTop: '6px' }}>{question.image_name}</p>
+            </div>
+          )}
+          {!question.image_name && <p style={{ fontSize: '13px', color: '#999', marginTop: '4px' }}>No image attached</p>}
+        </div>
+
         <button onClick={handleSave} disabled={saving} style={{
           padding: '12px', backgroundColor: '#0f3460', color: 'white',
           border: 'none', borderRadius: '8px', fontSize: '16px',

@@ -9,6 +9,7 @@ const baseNavItems = [
   { href: '/dashboard', label: 'Dashboard', icon: '📊' },
   { href: '/questions', label: 'Questions', icon: '📝' },
   { href: '/ai', label: 'AI Generate', icon: '🤖' },
+  { href: '/images', label: 'Images', icon: '🖼️' },
   { href: '/import', label: 'Import', icon: '📥' },
   { href: '/categories', label: 'Categories', icon: '📁' },
 ]
