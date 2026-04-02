@@ -103,6 +103,13 @@ export default function AIGeneratePage() {
       return
     }
 
+    // Duplicate job protection: auto-select existing job
+    if (data.existing_job_id) {
+      setMessage(data.error)
+      handleSelectJob(data.existing_job_id)
+      return
+    }
+
     if (!data.job_id) {
       setMessage(`Error: ${data.error || 'Failed to start job'}`)
       return

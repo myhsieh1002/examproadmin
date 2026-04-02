@@ -136,6 +136,22 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Missing app_id or category' }, { status: 400 })
   }
 
+  // Check for existing running job on same app + category
+  const { data: existing } = await supabase
+    .from('ai_jobs')
+    .select('id, status, current, total')
+    .eq('app_id', app_id)
+    .eq('category', category)
+    .in('status', ['running', 'stopping'])
+    .limit(1)
+
+  if (existing && existing.length > 0) {
+    return NextResponse.json({
+      error: `This category already has an active job (${existing[0].current}/${existing[0].total}). Check Active Jobs below.`,
+      existing_job_id: existing[0].id,
+    }, { status: 409 })
+  }
+
   // Fetch questions
   const { data: questions, error } = await supabase
     .from('questions')
