@@ -10,6 +10,7 @@ const baseNavItems = [
   { href: '/questions', label: 'Questions', icon: '📝' },
   { href: '/ai', label: 'AI Generate', icon: '🤖' },
   { href: '/images', label: 'Images', icon: '🖼️' },
+  { href: '/feedback', label: 'Feedback', icon: '💬' },
   { href: '/import', label: 'Import', icon: '📥' },
   { href: '/categories', label: 'Categories', icon: '📁' },
 ]

@@ -59,6 +59,20 @@ export interface AdminUser {
   created_at: string
 }
 
+export interface Feedback {
+  id: string
+  app_id: string
+  question_id: string | null
+  device_id: string
+  feedback_type: 'wrong_answer' | 'wrong_question' | 'wrong_explanation' | 'other'
+  message: string | null
+  status: 'open' | 'in_progress' | 'resolved' | 'rejected'
+  admin_response: string | null
+  admin_responder_id: string | null
+  responded_at: string | null
+  created_at: string
+}
+
 // JSON format used by existing iOS apps
 export interface QuestionJSON {
   id: string
