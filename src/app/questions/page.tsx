@@ -15,6 +15,7 @@ export default function QuestionsPage() {
   const [search, setSearch] = useState('')
   const [category, setCategory] = useState(searchParams.get('category') || '')
   const [difficulty, setDifficulty] = useState('')
+  const [flaggedOnly, setFlaggedOnly] = useState(false)
   const [loading, setLoading] = useState(true)
 
   // Sync category from URL search params
@@ -27,7 +28,7 @@ export default function QuestionsPage() {
 
   useEffect(() => {
     setPage(1)
-  }, [currentApp, search, category, difficulty])
+  }, [currentApp, search, category, difficulty, flaggedOnly])
 
   useEffect(() => {
     async function load() {
@@ -40,6 +41,7 @@ export default function QuestionsPage() {
       if (search) params.set('search', search)
       if (category) params.set('category', category)
       if (difficulty) params.set('difficulty', difficulty)
+      if (flaggedOnly) params.set('flagged', 'true')
 
       const [qRes, cRes] = await Promise.all([
         fetch(`/api/questions?${params}`),
@@ -55,7 +57,7 @@ export default function QuestionsPage() {
       setLoading(false)
     }
     load()
-  }, [currentApp, page, search, category, difficulty])
+  }, [currentApp, page, search, category, difficulty, flaggedOnly])
 
   const totalPages = Math.ceil(total / 50)
   const difficultyLabels: Record<number, string> = { 1: 'Easy', 2: 'Medium', 3: 'Hard' }
@@ -109,6 +111,15 @@ export default function QuestionsPage() {
           <option value="2">Medium</option>
           <option value="3">Hard</option>
         </select>
+        <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '14px', whiteSpace: 'nowrap' }}>
+          <input
+            type="checkbox"
+            checked={flaggedOnly}
+            onChange={(e) => setFlaggedOnly(e.target.checked)}
+            style={{ width: '16px', height: '16px' }}
+          />
+          <span style={{ color: flaggedOnly ? '#c2410c' : '#666' }}>Flagged only</span>
+        </label>
       </div>
 
       {/* Table */}

@@ -281,6 +281,33 @@ export default function EditQuestionPage() {
           )}
         </div>
 
+        {/* Flagged */}
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: '10px',
+          padding: '12px', borderRadius: '8px',
+          backgroundColor: question.tags?.includes('answer_disputed') ? '#fff7ed' : '#f9f9f9',
+          border: question.tags?.includes('answer_disputed') ? '1px solid #fed7aa' : '1px solid #eee',
+        }}>
+          <input
+            type="checkbox"
+            checked={question.tags?.includes('answer_disputed') || false}
+            onChange={(e) => {
+              const currentTags: string[] = question.tags || []
+              const newTags = e.target.checked
+                ? [...currentTags.filter((t: string) => t !== 'answer_disputed'), 'answer_disputed']
+                : currentTags.filter((t: string) => t !== 'answer_disputed')
+              setQuestion({ ...question, tags: newTags })
+            }}
+            style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+          />
+          <span style={{ fontSize: '14px', fontWeight: '600', color: question.tags?.includes('answer_disputed') ? '#c2410c' : '#666' }}>
+            Flagged — Answer Disputed
+          </span>
+          {question.tags?.includes('answer_disputed') && (
+            <span style={{ fontSize: '12px', color: '#999' }}>(uncheck to clear flag, then Save)</span>
+          )}
+        </div>
+
         {/* Last editor info */}
         {(editorName || question.last_edited_at) && (
           <div style={{ fontSize: '13px', color: '#888', borderTop: '1px solid #f0f0f0', paddingTop: '12px' }}>

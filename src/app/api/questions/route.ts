@@ -125,9 +125,12 @@ export async function GET(request: NextRequest) {
     .order('id')
     .range(offset, offset + limit - 1)
 
+  const flagged = searchParams.get('flagged')
+
   if (category) query = query.eq('category', category)
   if (difficulty) query = query.eq('difficulty', parseInt(difficulty))
   if (search) query = query.ilike('question', `%${search}%`)
+  if (flagged === 'true') query = query.contains('tags', ['answer_disputed'])
 
   const { data, error, count } = await query
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
