@@ -9,10 +9,14 @@ export default function Home() {
   useEffect(() => {
     // Check if arriving from invite/recovery link (session in URL hash)
     const hash = window.location.hash
-    if (hash.includes('access_token') || hash.includes('type=invite') || hash.includes('type=recovery')) {
-      // Let Supabase client parse the hash and establish session, then go to login for password setup
+    const isInvite = hash.includes('type=invite') || hash.includes('type=recovery')
+    const hasAccessToken = hash.includes('access_token')
+
+    if (isInvite || hasAccessToken) {
+      // Let Supabase client parse the hash and establish session first
       supabase.auth.getSession().then(() => {
-        router.push('/login')
+        // Pass setup=1 to login page since hash is lost by router.push
+        router.push('/login?setup=1')
       })
       return
     }
