@@ -88,7 +88,7 @@ export function ClientLayout({ children }: { children: React.ReactNode }) {
   }
 
   const navItems = userRole === 'super_admin'
-    ? [...baseNavItems, { href: '/users', label: 'Users', icon: '👥' }]
+    ? [...baseNavItems, { href: '/users', label: 'Users', icon: '👥' }, { href: '/usage', label: 'Usage', icon: '📈' }]
     : baseNavItems
 
   return (
