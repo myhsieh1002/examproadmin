@@ -137,11 +137,16 @@ ${q.source ? `來源：${q.source}` : ''}`
     const remaining = toProcess.length - chunk.length
     const isDone = remaining === 0
 
+    // When done, keep only flagged/error logs to save DB space
+    const storedLogs = isDone
+      ? newLogs.filter((l: { status: string; flagged?: boolean }) => l.status === 'error' || l.flagged)
+      : newLogs
+
     await supabase.from('ai_jobs').update({
       current: newCurrent,
       success_count: successCount,
       error_count: errorCount,
-      logs: newLogs,
+      logs: storedLogs,
       status: isDone ? 'done' : 'running',
       finished_at: isDone ? new Date().toISOString() : null,
     }).eq('id', job_id)
