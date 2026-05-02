@@ -5,9 +5,17 @@ const SUPABASE_ACCESS_TOKEN = process.env.SUPABASE_ACCESS_TOKEN || ''
 const PROJECT_REF = 'insaqafqbbunziratdxe'
 
 // Plan limits (update if upgrading)
-const PLAN_LIMITS: Record<string, { egress_gb: number; db_mb: number; storage_gb: number; mau: number; label: string }> = {
-  free: { egress_gb: 5, db_mb: 500, storage_gb: 1, mau: 50000, label: 'Free' },
-  pro: { egress_gb: 250, db_mb: 8192, storage_gb: 100, mau: 100000, label: 'Pro' },
+const PLAN_LIMITS: Record<string, { egress_gb: number; db_mb: number; storage_gb: number; mau: number; label: string; price: string }> = {
+  free: { egress_gb: 5, db_mb: 500, storage_gb: 1, mau: 50000, label: 'Free', price: 'US$0/mo' },
+  pro: { egress_gb: 250, db_mb: 8192, storage_gb: 100, mau: 100000, label: 'Pro', price: 'US$25/mo' },
+}
+
+// Average response size per request type (KB) — for egress estimation
+const AVG_RESPONSE_KB = {
+  rest: 2.5,    // typical REST API response ~2.5 KB
+  auth: 1.0,    // auth tokens ~1 KB
+  storage: 50,  // storage file downloads ~50 KB avg
+  realtime: 0.5,
 }
 
 export async function GET() {
@@ -46,17 +54,40 @@ export async function GET() {
     if (q.explanation_encrypted) appStats[q.app_id].withExplanation++
   }
 
-  // 3. Egress from Supabase Management API (if token available)
-  let egress = null
+  // 3. API request counts from Supabase Management API (for egress estimation)
+  // Note: Supabase public API only provides request counts, not actual egress bytes.
+  // Egress estimation = request_count × avg_response_size
+  // For accurate egress, check Supabase Dashboard manually.
+  let apiCounts: { interval: string; totalRequests: number; estimatedEgressMB: number; breakdown: Record<string, number> } | null = null
   if (SUPABASE_ACCESS_TOKEN) {
     try {
+      // Fetch 7-day window of API counts
       const res = await fetch(
         `https://api.supabase.com/v1/projects/${PROJECT_REF}/analytics/endpoints/usage.api-counts?interval=7day`,
         { headers: { Authorization: `Bearer ${SUPABASE_ACCESS_TOKEN}` } }
       )
       if (res.ok) {
         const data = await res.json()
-        egress = data
+        const rows = data.result || []
+        let totalRest = 0, totalAuth = 0, totalStorage = 0, totalRealtime = 0
+        for (const row of rows) {
+          totalRest += row.total_rest_requests || 0
+          totalAuth += row.total_auth_requests || 0
+          totalStorage += row.total_storage_requests || 0
+          totalRealtime += row.total_realtime_requests || 0
+        }
+        const totalRequests = totalRest + totalAuth + totalStorage + totalRealtime
+        const estimatedEgressKB =
+          totalRest * AVG_RESPONSE_KB.rest +
+          totalAuth * AVG_RESPONSE_KB.auth +
+          totalStorage * AVG_RESPONSE_KB.storage +
+          totalRealtime * AVG_RESPONSE_KB.realtime
+        apiCounts = {
+          interval: '7day',
+          totalRequests,
+          estimatedEgressMB: Math.round(estimatedEgressKB / 1024 * 100) / 100,
+          breakdown: { rest: totalRest, auth: totalAuth, storage: totalStorage, realtime: totalRealtime },
+        }
       }
     } catch { /* ignore */ }
   }
@@ -65,7 +96,6 @@ export async function GET() {
   const { data: apps } = await supabase.from('apps').select('id, display_name, total_questions').order('id')
 
   // 5. Billing cycle (Supabase bills on account creation anniversary)
-  // Project created 2026-03-24, so cycles on the 13th (org billing date from dashboard)
   const now = new Date()
   const cycleDay = 13
   const cycleStart = new Date(now.getFullYear(), now.getMonth(), cycleDay)
@@ -73,12 +103,14 @@ export async function GET() {
   const cycleEnd = new Date(cycleStart)
   cycleEnd.setMonth(cycleEnd.getMonth() + 1)
 
-  const plan = 'free' // Change to 'pro' if upgraded
+  const plan = 'pro' // Upgraded 2026-04-07
   const limits = PLAN_LIMITS[plan]
 
   return NextResponse.json({
     plan: limits.label,
     limits,
+    all_plans: PLAN_LIMITS,
+    current_plan_key: plan,
     billing_cycle: {
       start: cycleStart.toISOString().slice(0, 10),
       end: cycleEnd.toISOString().slice(0, 10),
@@ -87,6 +119,7 @@ export async function GET() {
       size_bytes: dbUsage?.database_size_bytes || null,
       tables: dbUsage?.tables || null,
     },
+    api_counts: apiCounts,
     questions: {
       total: totalQuestions,
       with_explanation: withExplanation,

@@ -17,18 +17,22 @@ export async function POST(request: NextRequest) {
 
   if (catError) return NextResponse.json({ error: catError.message }, { status: 500 })
 
-  // Get live counts from questions
-  const { data: questions } = await supabase
-    .from('questions')
-    .select('category')
-    .eq('app_id', app_id)
-    .eq('is_published', true)
-
+  // Get live counts from questions (paginated to bypass 1000 row limit)
   const countMap: Record<string, number> = {}
-  if (questions) {
-    for (const q of questions) {
+  let offset = 0
+  while (true) {
+    const { data: batch } = await supabase
+      .from('questions')
+      .select('category')
+      .eq('app_id', app_id)
+      .eq('is_published', true)
+      .range(offset, offset + 999)
+    if (!batch || batch.length === 0) break
+    for (const q of batch) {
       countMap[q.category] = (countMap[q.category] || 0) + 1
     }
+    if (batch.length < 1000) break
+    offset += 1000
   }
 
   // Update each category's question_count
