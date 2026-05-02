@@ -6,7 +6,11 @@ import type { Category } from '@/lib/types'
 export default function ImportExportPage() {
   const { currentApp, userRole } = useCurrentApp()
   const isSuperAdmin = userRole === 'super_admin'
-  const [tab, setTab] = useState<'import' | 'export'>('import')
+  const [tab, setTab] = useState<'import' | 'export' | 'backup'>('import')
+
+  // Backup state
+  const [backingUp, setBackingUp] = useState(false)
+  const [backupMessage, setBackupMessage] = useState('')
   const [categories, setCategories] = useState<Category[]>([])
 
   // Import state
@@ -108,6 +112,41 @@ export default function ImportExportPage() {
     setExporting(false)
   }
 
+  // --- Backup handler: download full DB JSON backup ---
+  const handleBackup = async () => {
+    setBackingUp(true)
+    setBackupMessage('Preparing backup... This may take 30–60 seconds.')
+    try {
+      const res = await fetch('/api/backup?format=json')
+      if (!res.ok) {
+        setBackupMessage(`❌ Backup failed (HTTP ${res.status})`)
+        setBackingUp(false)
+        return
+      }
+      const blob = await res.blob()
+      const disposition = res.headers.get('Content-Disposition') || ''
+      const fileNameMatch = disposition.match(/filename="(.+)"/)
+      const fileName = fileNameMatch
+        ? fileNameMatch[1]
+        : `examproadmin_backup_${new Date().toISOString().slice(0, 10)}.json`
+
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = fileName
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+
+      const sizeMB = (blob.size / 1024 / 1024).toFixed(2)
+      setBackupMessage(`✅ Backup downloaded: ${fileName} (${sizeMB} MB)`)
+    } catch (e) {
+      setBackupMessage(`❌ Backup failed: ${e instanceof Error ? e.message : 'Unknown error'}`)
+    }
+    setBackingUp(false)
+  }
+
   const tabStyle = (active: boolean) => ({
     padding: '10px 24px',
     fontSize: '15px',
@@ -131,6 +170,9 @@ export default function ImportExportPage() {
         <button onClick={() => setTab('import')} style={tabStyle(tab === 'import')}>Import</button>
         {isSuperAdmin && (
           <button onClick={() => setTab('export')} style={tabStyle(tab === 'export')}>Export</button>
+        )}
+        {isSuperAdmin && (
+          <button onClick={() => setTab('backup')} style={tabStyle(tab === 'backup')}>Backup</button>
         )}
       </div>
 
@@ -245,6 +287,63 @@ export default function ImportExportPage() {
             >
               {exporting ? 'Exporting...' : 'Download Export'}
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* ===== BACKUP TAB ===== */}
+      {tab === 'backup' && isSuperAdmin && (
+        <div>
+          <p style={{ color: '#666', marginBottom: '24px', fontSize: '14px' }}>
+            Download a full database snapshot (all tables, all apps) as a JSON file.
+          </p>
+
+          <div style={{ backgroundColor: 'white', padding: '24px', borderRadius: '12px', border: '1px solid #eee', marginBottom: '16px' }}>
+            <h3 style={{ fontSize: '16px', fontWeight: '600', marginBottom: '12px' }}>One-click JSON Backup</h3>
+            <p style={{ fontSize: '14px', color: '#666', marginBottom: '16px', lineHeight: '1.6' }}>
+              Includes: <code style={{ fontSize: '12px', backgroundColor: '#f5f5f5', padding: '2px 6px', borderRadius: '4px' }}>apps</code>{' '}
+              <code style={{ fontSize: '12px', backgroundColor: '#f5f5f5', padding: '2px 6px', borderRadius: '4px' }}>categories</code>{' '}
+              <code style={{ fontSize: '12px', backgroundColor: '#f5f5f5', padding: '2px 6px', borderRadius: '4px' }}>questions</code>{' '}
+              <code style={{ fontSize: '12px', backgroundColor: '#f5f5f5', padding: '2px 6px', borderRadius: '4px' }}>sync_manifest</code>{' '}
+              <code style={{ fontSize: '12px', backgroundColor: '#f5f5f5', padding: '2px 6px', borderRadius: '4px' }}>admin_users</code>{' '}
+              <code style={{ fontSize: '12px', backgroundColor: '#f5f5f5', padding: '2px 6px', borderRadius: '4px' }}>ai_jobs</code>{' '}
+              <code style={{ fontSize: '12px', backgroundColor: '#f5f5f5', padding: '2px 6px', borderRadius: '4px' }}>feedback</code>{' '}
+              <code style={{ fontSize: '12px', backgroundColor: '#f5f5f5', padding: '2px 6px', borderRadius: '4px' }}>question_images</code>
+            </p>
+
+            <button
+              onClick={handleBackup}
+              disabled={backingUp}
+              style={{
+                padding: '12px 24px',
+                backgroundColor: backingUp ? '#ccc' : '#7c3aed',
+                color: 'white', border: 'none', borderRadius: '8px', fontSize: '15px',
+                cursor: backingUp ? 'not-allowed' : 'pointer',
+              }}
+            >
+              {backingUp ? 'Backing up…' : '💾 Download Full Backup'}
+            </button>
+
+            {backupMessage && (
+              <p style={{
+                marginTop: '16px', fontSize: '14px',
+                padding: '10px', backgroundColor: '#f9f9f9', borderRadius: '6px',
+              }}>
+                {backupMessage}
+              </p>
+            )}
+          </div>
+
+          <div style={{ backgroundColor: '#fefce8', padding: '16px', borderRadius: '10px', border: '1px solid #fde68a' }}>
+            <h4 style={{ fontSize: '14px', fontWeight: '600', marginBottom: '8px', color: '#854d0e' }}>
+              ⚠️ Note on backup coverage
+            </h4>
+            <ul style={{ fontSize: '13px', color: '#854d0e', marginLeft: '16px', lineHeight: '1.6' }}>
+              <li>JSON backup: data only (no schema, triggers, or RLS policies)</li>
+              <li>Storage bucket images are NOT included</li>
+              <li>For full schema backup, run <code style={{ fontSize: '12px' }}>./backup.sh</code> locally — saves to iCloud Drive</li>
+              <li>Supabase Pro automatic backups are kept for 7 days</li>
+            </ul>
           </div>
         </div>
       )}

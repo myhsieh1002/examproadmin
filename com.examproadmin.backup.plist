@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.examproadmin.backup</string>
+
+    <!-- Run backup.sh via bash -->
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>/Users/myhsieh/02 ExamPro Series/題庫開發/examproadmin/backup.sh</string>
+    </array>
+
+    <!-- Ensure PATH is set so /opt/homebrew/bin is visible -->
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    </dict>
+
+    <!-- Working directory = project folder so .env.local is found -->
+    <key>WorkingDirectory</key>
+    <string>/Users/myhsieh/02 ExamPro Series/題庫開發/examproadmin</string>
+
+    <!-- Schedule: every Sunday at 02:00 local time -->
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Weekday</key>
+        <integer>0</integer>
+        <key>Hour</key>
+        <integer>2</integer>
+        <key>Minute</key>
+        <integer>0</integer>
+    </dict>
+
+    <!-- If Mac was asleep at scheduled time, run at next wake -->
+    <key>StartOnMount</key>
+    <false/>
+    <key>RunAtLoad</key>
+    <false/>
+
+    <!-- Log output -->
+    <key>StandardOutPath</key>
+    <string>/tmp/examproadmin_backup.log</string>
+    <key>StandardErrorPath</key>
+    <string>/tmp/examproadmin_backup_err.log</string>
+
+    <!-- Prevent rapid restarts on crash -->
+    <key>ThrottleInterval</key>
+    <integer>60</integer>
+</dict>
+</plist>
