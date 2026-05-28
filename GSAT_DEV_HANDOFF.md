@@ -108,13 +108,43 @@ group_order           int   題組內順序
 is_published          bool  預設 true
 ```
 
-**categories**（科目細類，由 recount 自動計數）
+**categories**（科目細類）
+```sql
+CREATE TABLE categories (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),  -- 自動產生，insert 不用給
+  app_id TEXT NOT NULL REFERENCES apps(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  icon TEXT,                          -- 可 null
+  sort_order INTEGER DEFAULT 0,
+  question_count INTEGER DEFAULT 0,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  UNIQUE(app_id, name)
+);
 ```
-id, app_id, name, icon, sort_order, question_count, created_at
+
+### ✅【已驗證】新 app 必須先手動建 categories
+- **recount 只「更新」既有 categories 計數，不會「建立」新類別**
+  （`/api/categories/recount` 第 40-47 行只對既有列做 update）
+  → 若不先建，recount 回 `updated:0`，categories 表空、question_count 停在 0
+- 後台 `/api/questions?action=categories` 有 orphan fallback：
+  questions 裡有但 categories 表沒有的類別，會以 `orphan-{name}` 臨時顯示
+  （排在最後 sort_order 9999+、標 `_isOrphan`）→ 能動但很亂
+- **正確做法**：匯入題目前先 insert categories（給 app_id、name、sort_order，
+  id 會自動產生），這樣才有正確排序 + question_count + 無 orphan 標記
+
+```python
+# 新 app 第一次：先建 categories（id 自動產生，只給 app_id/name/sort_order）
+cats = [
+    {'app_id':'gsat_social','name':'歷史','sort_order':1},
+    {'app_id':'gsat_social','name':'地理','sort_order':2},
+    {'app_id':'gsat_social','name':'公民與社會','sort_order':3},
+]
+body = json.dumps(cats).encode()
+req = urllib.request.Request(f'{URL}/rest/v1/categories', data=body, method='POST',
+    headers={'apikey':KEY,'Authorization':f'Bearer {KEY}',
+             'Content-Type':'application/json','Prefer':'return=minimal'})
+urllib.request.urlopen(req).read()
 ```
-⚠️ 國考的 categories 是「預先存在」才被 recount 更新計數。
-新 app 第一次匯入前，**先驗證 recount 是否會自動建立缺少的類別**，
-若不會則需手動 insert categories 列（每科一列）。
 
 ### App ID 命名建議
 | App | id | 題目 ID 前綴 |
@@ -340,12 +370,13 @@ urllib.request.urlopen(req).read()
 我想先從【社會】科開始（純文字比例最高、最好處理）。
 請先做以下事情（先別動手匯入）：
 1. 確認 CEEC 網站目前的學測歷屆試題下載結構（哪幾年、哪些 PDF 連結）
-2. 確認新 app 要怎麼在 apps / categories 表建立（特別注意交班文件
-   第四節提到的「categories 是否需手動 insert」這個未驗證點）
-3. 下載 111 學年度學測社會的 PDF（試題+答案）做一份試解析，
+2. 下載 111 學年度學測社會的 PDF（試題+答案）做一份試解析，
    讓我看格式與品質，確認可行後再全量處理
 
-把 1-3 做完給我看，我確認後再繼續。
+（新 app 建立方式已在第四節驗證：先 insert apps 列 → 再 insert
+categories 列（每科一列）→ 才匯入題目 → recount → sync）
+
+把 1-2 做完給我看，我確認後再繼續。
 ```
 
 ---
