@@ -1,16 +1,16 @@
 # ExamPro Admin
 
-題庫管理後台 — 為 ExamPro 系列 iOS app 提供題庫維護、AI 詳解生成、使用量監控、備份等管理功能。
+題庫管理後台 — 為 ExamPro 系列 iOS / Android app 提供題庫維護、AI 詳解生成、使用量監控、備份等管理功能。
 
 🌐 **Live**: https://examproadmin.vercel.app
 
 ---
 
-## 📊 題庫規模（截至 2026-05-11）
+## 📊 題庫規模（截至 2026-05-29）
 
-- **總題數**：**150,276** 題
-- **App 數**：34 個（醫護國考、駕照筆試、導遊領隊等）
-- **儲存**：Supabase PostgreSQL（Pro 方案）+ Storage 圖片 1,086 張
+- **總題數**：**152,316** 題
+- **App 數**：44 個（醫護國考、駕照筆試、導遊領隊、**高中學測**等）
+- **儲存**：Supabase PostgreSQL（Pro 方案，使用率 < 6%）+ Storage 圖片 800+ 張
 
 ### Top 10 題庫
 | App | 題數 |
@@ -64,6 +64,19 @@
 
 ## 📅 重要里程碑
 
+### 2026-05-29 — Android 版開發啟動
+
+撰寫 Android 版本完整交班文件，後端完全沿用既有 Supabase 架構。
+建議單一 Gradle 專案 + Product Flavors 策略，避免 iOS 端「24 個獨立專案」的程式碼重複。
+**資料庫結構與 REST API 完全平台中立，Android 無需任何 schema 調整**。
+
+### 2026-05 — 高中題庫系列開啟
+
+新增高中學測（GSAT）系列題庫進入同一資料庫：
+- 學測國文、英文、數學A、社會、自然（含 AI 生成練習題）共約 2,000+ 題
+- 與國考題庫共用 apps / questions / categories 結構，用 `gsat_` / `GSATxx-` 前綴隔離
+- 寫了三份開發交班文件（學測通用、跨電腦數學、Android 版）給其他 session 接續
+
 ### 2026-05-11 — 題庫缺漏全面修復（+13,392 題）
 
 完成 11 個 app 的歷史考古題缺漏補完，並修正 4,320 筆因 exam code 用錯而誤標籤的資料。
@@ -112,8 +125,14 @@ EXPLANATION_ENCRYPTION_KEY=  # 32-byte hex
 
 ## 📂 相關文件
 
+### 後台維運
 - [BACKUP_SETUP.md](./BACKUP_SETUP.md) — 備份系統使用、災難還原指南
 - [feedback_iOS.md](./feedback_iOS.md) — iOS app 整合 feedback 系統的說明
+
+### Client app 開發交班（另一個 session 用）
+- [ANDROID_DEV_HANDOFF.md](./ANDROID_DEV_HANDOFF.md) — **Android 版開發**（44 app 清單、iOS 架構對映、Compose/Room/Play Billing 技術棧、Product Flavors 策略）
+- [GSAT_DEV_HANDOFF.md](./GSAT_DEV_HANDOFF.md) — 高中學測題庫開發（CEEC 下載、同庫決策、踩坑清單）
+- [MATH_BANK_HANDOFF.md](./MATH_BANK_HANDOFF.md) — **跨電腦**高中數學題庫開發（連線方法、公式呈現策略）
 
 ---
 
