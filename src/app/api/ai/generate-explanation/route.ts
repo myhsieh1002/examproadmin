@@ -71,7 +71,7 @@ ${category ? `科目：${category}` : ''}
 ${source ? `來源：${source}` : ''}`
 
     const message = await client.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-4-5-20250929',
       max_tokens: 1024,
       system: systemPromptFor(app_id),
       messages: [{ role: 'user', content: userPrompt }],
