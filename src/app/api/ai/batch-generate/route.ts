@@ -114,7 +114,9 @@ export async function POST(request: NextRequest) {
     }
 
     // Process chunk
-    const results: { questionId: string; status: 'success' | 'error'; error?: string; flagged?: boolean }[] = []
+    const results: { questionId: string; status: 'success' | 'error'; error?: string; flagged?: boolean; fallback?: boolean }[] = []
+
+    const systemPrompt = systemPromptFor(job.app_id)
 
     for (const q of chunk) {
       try {
@@ -129,17 +131,44 @@ ${optionsText}
 ${q.category ? `科目：${q.category}` : ''}
 ${q.source ? `來源：${q.source}` : ''}`
 
-        const message = await client.messages.create({
+        let message = await client.messages.create({
           model: 'claude-sonnet-4-5-20250929',
           max_tokens: 1024,
-          system: systemPromptFor(job.app_id),
+          system: systemPrompt,
           messages: [{ role: 'user', content: userPrompt }],
         })
 
-        const explanation = message.content
+        let explanation = message.content
           .filter((block) => block.type === 'text')
           .map((block) => block.text)
           .join('')
+
+        // Sonnet 4.5 sometimes refuses medical questions (stop_reason: refusal → empty text).
+        // Fall back to Haiku 4.5, which is more permissive on these topics.
+        let usedFallback = false
+        if (message.stop_reason === 'refusal' || !explanation.trim()) {
+          usedFallback = true
+          message = await client.messages.create({
+            model: 'claude-haiku-4-5-20251001',
+            max_tokens: 2048,
+            system: systemPrompt,
+            messages: [{ role: 'user', content: userPrompt }],
+          })
+          explanation = message.content
+            .filter((block) => block.type === 'text')
+            .map((block) => block.text)
+            .join('')
+        }
+
+        // Both models refused / returned empty — record as error so the DB stays clean.
+        if (!explanation.trim()) {
+          results.push({
+            questionId: q.id,
+            status: 'error',
+            error: `Model refused (stop_reason: ${message.stop_reason})`,
+          })
+          continue
+        }
 
         // Detect answer dispute flag
         const flagged = explanation.includes('[答案疑慮]')
@@ -154,7 +183,7 @@ ${q.source ? `來源：${q.source}` : ''}`
         }
         await supabase.from('questions').update(updateData).eq('id', q.id)
 
-        results.push({ questionId: q.id, status: 'success', flagged })
+        results.push({ questionId: q.id, status: 'success', flagged, fallback: usedFallback })
       } catch (err: unknown) {
         const errMsg = err instanceof Error ? err.message : 'Unknown error'
         results.push({ questionId: q.id, status: 'error', error: errMsg })

@@ -70,21 +70,47 @@ ${optionsText}
 ${category ? `科目：${category}` : ''}
 ${source ? `來源：${source}` : ''}`
 
-    const message = await client.messages.create({
+    const systemPrompt = systemPromptFor(app_id)
+
+    let message = await client.messages.create({
       model: 'claude-sonnet-4-5-20250929',
       max_tokens: 1024,
-      system: systemPromptFor(app_id),
+      system: systemPrompt,
       messages: [{ role: 'user', content: userPrompt }],
     })
 
-    const explanation = message.content
+    let explanation = message.content
       .filter((block) => block.type === 'text')
       .map((block) => block.text)
       .join('')
 
+    // Sonnet 4.5 sometimes refuses medical questions (stop_reason: refusal → empty text).
+    // Fall back to Haiku 4.5, which is more permissive on these topics.
+    let usedFallback = false
+    if (message.stop_reason === 'refusal' || !explanation.trim()) {
+      usedFallback = true
+      message = await client.messages.create({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 2048,
+        system: systemPrompt,
+        messages: [{ role: 'user', content: userPrompt }],
+      })
+      explanation = message.content
+        .filter((block) => block.type === 'text')
+        .map((block) => block.text)
+        .join('')
+    }
+
+    if (!explanation.trim()) {
+      return NextResponse.json(
+        { error: `Model refused to answer (stop_reason: ${message.stop_reason})` },
+        { status: 502 }
+      )
+    }
+
     const flagged = explanation.includes('[答案疑慮]')
 
-    return NextResponse.json({ explanation, flagged })
+    return NextResponse.json({ explanation, flagged, fallback: usedFallback })
   } catch (error: unknown) {
     const errMsg = error instanceof Error ? error.message : 'Unknown error'
     return NextResponse.json({ error: errMsg }, { status: 500 })
